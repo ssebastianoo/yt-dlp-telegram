@@ -45,7 +45,7 @@ def download_video(message, url):
                     update = False
 
                     if last_edited.get(f"{message.chat.id}-{msg.message_id}"):
-                        if (datetime.datetime.now() - last_edited[f"{message.chat.id}-{msg.message_id}"]).total_seconds() >= 3:
+                        if (datetime.datetime.now() - last_edited[f"{message.chat.id}-{msg.message_id}"]).total_seconds() >= 5:
                             update = True
                     else:
                         update = True
@@ -55,8 +55,7 @@ def download_video(message, url):
                                      100 / d['total_bytes'])
                         bot.edit_message_text(
                             chat_id=message.chat.id, message_id=msg.message_id, text=f"Downloading {d['info_dict']['title']}\n\n{perc}%")
-                        last_edited[f"Downloading {message.chat.id}-{msg.message_id}"] = datetime.datetime.now(
-                        )
+                        last_edited[f"{message.chat.id}-{msg.message_id}"] = datetime.datetime.now()
                 except Exception as e:
                     print(e)
 

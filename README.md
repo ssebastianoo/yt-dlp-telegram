@@ -1,5 +1,5 @@
 # YT-DLP Telegram Bot
-Telegram bot that allows you to download videos from YouTube, Twitter Reddit and many other socials using [yt-dlp](https://github.com/yt-dlp/yt-dlp) 
+Telegram bot that allows you to download videos from YouTube, Twitter, Reddit and many other socials using [yt-dlp](https://github.com/yt-dlp/yt-dlp) 
 
 [Use the Bot](https://t.me/SatoruBot)
 
