@@ -83,17 +83,25 @@ def download_video(message, url):
                 else:
                     bot.edit_message_text(
                         'There was an error downloading your video', message.chat.id, msg.message_id)
-
+    else:
+        bot.reply_to(message, 'Invalid URL')
 
 @bot.message_handler(commands=['download'])
 def download_command(message):
+    text = ''
     if len(message.text.split(' ')) < 2:
-        bot.reply_to(message, 'Invalid usage, use `/download url`', parse_mode="MARKDOWN")
-        return
-    download_video(message, message.text.split(' ')[1])
+        if message.reply_to_message and message.reply_to_message.text:
+            text = message.reply_to_message.text
+
+        else:
+            bot.reply_to(message, 'Invalid usage, use `/download url`', parse_mode="MARKDOWN")
+            return
+    else:
+        text = message.text.split(' ')[1]
+    download_video(message, text)
 
 @bot.message_handler(func=lambda m: True)
-def echo_all(message):
+def handle_private_messages(message):
 
     if message.chat.type == 'private':
         download_video(message, message.text)
