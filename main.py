@@ -100,10 +100,14 @@ def download_command(message):
         text = message.text.split(' ')[1]
     download_video(message, text)
 
-@bot.message_handler(func=lambda m: True)
+@bot.message_handler(func=lambda m: True, content_types=["text", "pinned_message", "photo", "audio", "video", "location", "contact", "voice", "document"])
 def handle_private_messages(message):
+    text = message.text if message.text else message.caption if message.caption else None
+
+    if text and ('furry' in text.lower()):
+        bot.send_sticker(message.chat.id, "CAACAgUAAxkBAAIEvGMR4SIRsw4PYxvDXKpXMsOAAwkzAALtBgACAnofAAHhRQWlgMA6YCkE", reply_to_message_id=message.message_id)
 
     if message.chat.type == 'private':
-        download_video(message, message.text)
+        download_video(message, text)
 
 bot.infinity_polling()
