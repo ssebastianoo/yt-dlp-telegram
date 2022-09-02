@@ -105,7 +105,7 @@ def handle_private_messages(message):
     text = message.text if message.text else message.caption if message.caption else None
 
     if text and ('furry' in text.lower()):
-        bot.send_sticker(message.chat.id, "CAACAgUAAxkBAAIEvGMR4SIRsw4PYxvDXKpXMsOAAwkzAALtBgACAnofAAHhRQWlgMA6YCkE", reply_to_message_id=message.message_id)
+        bot.send_sticker(message.chat.id, config.sticker_id, reply_to_message_id=message.message_id)
 
     if message.chat.type == 'private':
         download_video(message, text)
