@@ -103,10 +103,10 @@ def download_command(message):
 @bot.message_handler(func=lambda m: True, content_types=["text", "pinned_message", "photo", "audio", "video", "location", "contact", "voice", "document"])
 def handle_private_messages(message):
     text = message.text if message.text else message.caption if message.caption else None
-
     if text and ('furry' in text.lower()):
         bot.send_sticker(message.chat.id, config.sticker_id, reply_to_message_id=message.message_id)
-
+    if text and 'whatsapp' in text.lower():
+        bot.send_video(message.chat.id, 'BAACAgQAAx0CW_bolQACd8ljEeYX0Ub3EQphxa2xmV6HUcDoOAACzA0AAnCIkFCE3KhF14BM7SkE', reply_to_message_id=message.message_id)
     if message.chat.type == 'private':
         download_video(message, text)
 
