@@ -30,7 +30,7 @@ def test(message):
         message, "*Send me a video link* and I'll download it for you, works with *YouTube*, *Twitter*, *TikTok*, *Reddit* and more.\n\n_Powered by_ [yt-dlp](https://github.com/yt-dlp/yt-dlp/)", parse_mode="MARKDOWN", disable_web_page_preview=True)
 
 
-def download_video(message, url):
+def download_video(message, url, audio=False):
     url_info = urlparse(url)
     if url_info.scheme:
         if url_info.netloc in ['www.youtube.com', 'youtu.be', 'youtube.com', 'youtu.be']:
@@ -60,14 +60,22 @@ def download_video(message, url):
                     print(e)
 
         msg = bot.reply_to(message, 'Downloading...')
-        with yt_dlp.YoutubeDL({'format': 'mp4', 'outtmpl': 'outputs/%(title)s.%(ext)s', 'progress_hooks': [progress], }) as ydl:
+        with yt_dlp.YoutubeDL({'format': 'mp4', 'outtmpl': 'outputs/%(title)s.%(ext)s', 'progress_hooks': [progress], 'postprocessors': [{  # Extract audio using ffmpeg
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+        }] if audio else []}) as ydl:
             try:
                 info = ydl.extract_info(url, download=True)
                 bot.edit_message_text(
                     chat_id=message.chat.id, message_id=msg.message_id, text='Sending file to Telegram...')
                 try:
-                    bot.send_video(message.chat.id, open(
-                        info['requested_downloads'][0]['filepath'], 'rb'), reply_to_message_id=message.message_id)
+                    if audio:
+                        bot.send_audio(message.chat.id, open(
+                            info['requested_downloads'][0]['filepath'], 'rb'), reply_to_message_id=message.message_id)
+
+                    else:
+                        bot.send_video(message.chat.id, open(
+                            info['requested_downloads'][0]['filepath'], 'rb'), reply_to_message_id=message.message_id)
                     bot.delete_message(message.chat.id, msg.message_id)
                 except Exception as e:
                     print(e)
@@ -86,6 +94,7 @@ def download_video(message, url):
     else:
         bot.reply_to(message, 'Invalid URL')
 
+
 @bot.message_handler(commands=['download'])
 def download_command(message):
     text = ''
@@ -94,20 +103,41 @@ def download_command(message):
             text = message.reply_to_message.text
 
         else:
-            bot.reply_to(message, 'Invalid usage, use `/download url`', parse_mode="MARKDOWN")
+            bot.reply_to(
+                message, 'Invalid usage, use `/download url`', parse_mode="MARKDOWN")
             return
     else:
         text = message.text.split(' ')[1]
     download_video(message, text)
 
+
+@bot.message_handler(commands=['audio'])
+def download_audio_command(message):
+    text = ''
+    if len(message.text.split(' ')) < 2:
+        if message.reply_to_message and message.reply_to_message.text:
+            text = message.reply_to_message.text
+
+        else:
+            bot.reply_to(
+                message, 'Invalid usage, use `/download url`', parse_mode="MARKDOWN")
+            return
+    else:
+        text = message.text.split(' ')[1]
+    download_video(message, text, True)
+
+
 @bot.message_handler(func=lambda m: True, content_types=["text", "pinned_message", "photo", "audio", "video", "location", "contact", "voice", "document"])
 def handle_private_messages(message):
     text = message.text if message.text else message.caption if message.caption else None
     if text and ('furry' in text.lower()):
-        bot.send_sticker(message.chat.id, config.sticker_id, reply_to_message_id=message.message_id)
+        bot.send_sticker(message.chat.id, config.sticker_id,
+                         reply_to_message_id=message.message_id)
     if text and 'whatsapp' in text.lower():
-        bot.send_video(message.chat.id, 'BAACAgQAAx0CW_bolQACd8ljEeYX0Ub3EQphxa2xmV6HUcDoOAACzA0AAnCIkFCE3KhF14BM7SkE', reply_to_message_id=message.message_id)
+        bot.send_video(message.chat.id, 'BAACAgQAAx0CW_bolQACd8ljEeYX0Ub3EQphxa2xmV6HUcDoOAACzA0AAnCIkFCE3KhF14BM7SkE',
+                       reply_to_message_id=message.message_id)
     if message.chat.type == 'private':
         download_video(message, text)
+
 
 bot.infinity_polling()
