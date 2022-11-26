@@ -143,6 +143,7 @@ def define(message):
     else:
         bot.reply_to(message, "No results found")
 
+
 shortcuts = {
     "smh": "shake my head",
     "dw": "don't worry",
@@ -158,9 +159,14 @@ shortcuts = {
     "imo": "in my opinion",
 }
 
+
 @ bot.message_handler(func=lambda m: True, content_types=["text", "pinned_message", "photo", "audio", "video", "location", "contact", "voice", "document"])
 def handle_private_messages(message):
     text = message.text if message.text else message.caption if message.caption else None
+
+    if message.chat.type == 'private':
+        download_video(message, text)
+        return
 
     for shortcut in shortcuts:
         if text and shortcut in text:
