@@ -5,10 +5,14 @@ import config
 import yt_dlp
 import re
 import os
+import requests
+import urllib.parse
 
 bot = telebot.TeleBot(config.token)
 
 last_edited = {}
+
+ses = requests.Session()
 
 
 def youtube_url_validation(url):
@@ -95,42 +99,74 @@ def download_video(message, url, audio=False):
         bot.reply_to(message, 'Invalid URL')
 
 
-@bot.message_handler(commands=['download'])
-def download_command(message):
-    text = ''
+def get_text(message):
     if len(message.text.split(' ')) < 2:
         if message.reply_to_message and message.reply_to_message.text:
-            text = message.reply_to_message.text
+            return message.reply_to_message.text
 
         else:
-            bot.reply_to(
-                message, 'Invalid usage, use `/download url`', parse_mode="MARKDOWN")
-            return
+            return None
     else:
-        text = message.text.split(' ')[1]
+        return message.text.split(' ')[1]
+
+
+@bot.message_handler(commands=['download'])
+def download_command(message):
+    text = get_text(message)
+    if not text:
+        bot.reply_to(
+            message, 'Invalid usage, use `/download url`', parse_mode="MARKDOWN")
     download_video(message, text)
 
 
 @bot.message_handler(commands=['audio'])
 def download_audio_command(message):
-    text = ''
-    if len(message.text.split(' ')) < 2:
-        if message.reply_to_message and message.reply_to_message.text:
-            text = message.reply_to_message.text
-
-        else:
-            bot.reply_to(
-                message, 'Invalid usage, use `/download url`', parse_mode="MARKDOWN")
-            return
-    else:
-        text = message.text.split(' ')[1]
+    text = get_text(message)
+    if not text:
+        bot.reply_to(
+            message, 'Invalid usage, use `/audio url`', parse_mode="MARKDOWN")
     download_video(message, text, True)
 
 
-@bot.message_handler(func=lambda m: True, content_types=["text", "pinned_message", "photo", "audio", "video", "location", "contact", "voice", "document"])
+@bot.message_handler(commands=['define', 'urban', 'definisci', 'dictionary', 'dizionario'])
+def define(message):
+    text = get_text(message)
+    if not text:
+        bot.reply_to(
+            message, 'Invalid usage, use `/define word`', parse_mode="MARKDOWN")
+        return
+    res = ses.get(
+        "https://api.urbandictionary.com/v0/define?term=" + urllib.parse.quote(text))
+    data = res.json()
+    if len(data['list']) > 0:
+        bot.reply_to(message, data['list'][0]['definition'])
+    else:
+        bot.reply_to(message, "No results found")
+
+shortcuts = {
+    "smh": "shake my head",
+    "dw": "don't worry",
+    "hf": "have fun",
+    "brb": "be right back",
+    "g2g": "got to go",
+    "smth": "something",
+    "ty": "thank you",
+    "yw": "you're welcome",
+    "jk": "just kidding",
+    "wp": "well played",
+    "gl": "good luck",
+    "imo": "in my opinion",
+}
+
+@ bot.message_handler(func=lambda m: True, content_types=["text", "pinned_message", "photo", "audio", "video", "location", "contact", "voice", "document"])
 def handle_private_messages(message):
     text = message.text if message.text else message.caption if message.caption else None
-    if text and ('furry' in text.lower()):
+
+    for shortcut in shortcuts:
+        if text and shortcut in text:
+            bot.reply_to(message, shortcuts[shortcut])
+
+    if text and 'furry' in text.lower():
         bot.send_sticker(message.chat.id, config.sticker_id,
                          reply_to_message_id=message.message_id)
     if text and 'whatsapp' in text.lower():
