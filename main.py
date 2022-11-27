@@ -116,6 +116,7 @@ def download_command(message):
     if not text:
         bot.reply_to(
             message, 'Invalid usage, use `/download url`', parse_mode="MARKDOWN")
+        return
     download_video(message, text)
 
 
@@ -125,6 +126,7 @@ def download_audio_command(message):
     if not text:
         bot.reply_to(
             message, 'Invalid usage, use `/audio url`', parse_mode="MARKDOWN")
+        return
     download_video(message, text, True)
 
 
@@ -160,7 +162,7 @@ shortcuts = {
 }
 
 
-@ bot.message_handler(func=lambda m: True, content_types=["text", "pinned_message", "photo", "audio", "video", "location", "contact", "voice", "document"])
+@bot.message_handler(func=lambda m: True, content_types=["text", "pinned_message", "photo", "audio", "video", "location", "contact", "voice", "document"])
 def handle_private_messages(message):
     text = message.text if message.text else message.caption if message.caption else None
 
