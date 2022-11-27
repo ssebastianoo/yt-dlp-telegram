@@ -159,6 +159,20 @@ shortcuts = {
     "wp": "well played",
     "gl": "good luck",
     "imo": "in my opinion",
+    "ngl": "not gonna lie",
+    "ong": "on god",
+    "obv": "obviously",
+    "idk": "I don't know",
+    "til": "today I learned",
+    "tih": "thanks I hate",
+    "tbf": "to be fair",
+    "rn": "right now",
+    "fr": "for real",
+    "tbh": "to be honest",
+    "yw": "you're welcome",
+    "wbu": "what about you",
+    "hmu": "hit me up",
+    "istg": "I swear to god",
 }
 
 
@@ -170,9 +184,16 @@ def handle_private_messages(message):
         download_video(message, text)
         return
 
+    found = []
+    words = text.split(' ') if text else []
+    words = [w.lower() for w in words]
+
     for shortcut in shortcuts:
-        if text and shortcut in text:
-            bot.reply_to(message, shortcuts[shortcut])
+        if shortcut.lower() in words:
+            found.append(shortcuts[shortcut])
+
+    if len(found) > 0:
+        bot.reply_to(message, " ".join(found))
 
     if text and 'furry' in text.lower():
         bot.send_sticker(message.chat.id, config.sticker_id,
