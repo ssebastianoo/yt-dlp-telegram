@@ -98,13 +98,14 @@ def download_video(message, url, audio=False):
 
 
 def log(message, text: str, media: str):
-    if message.chat.type == 'private':
-        chat_info = "Private chat"
-    else:
-        chat_info = f"Group: *{message.chat.title}* (`{message.chat.id}`)"
+    if config.logs:
+        if message.chat.type == 'private':
+            chat_info = "Private chat"
+        else:
+            chat_info = f"Group: *{message.chat.title}* (`{message.chat.id}`)"
 
-    bot.send_message(
-        config.logs, f"Download request (`{media}`) from @{message.from_user.username} (`{message.from_user.id}`)\n\n{chat_info}\n\n{text}", parse_mode="MARKDOWN")
+        bot.send_message(
+            config.logs, f"Download request (`{media}`) from @{message.from_user.username} (`{message.from_user.id}`)\n\n{chat_info}\n\n{text}", parse_mode="MARKDOWN")
 
 
 def get_text(message):
