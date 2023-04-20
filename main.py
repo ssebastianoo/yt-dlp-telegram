@@ -65,16 +65,9 @@ def download_video(message, url, audio=False):
         with yt_dlp.YoutubeDL({'format': 'mp4', 'outtmpl': 'outputs/%(title)s.%(ext)s', 'progress_hooks': [progress], 'postprocessors': [{  # Extract audio using ffmpeg
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
-        }] if audio else []}) as ydl:
+        }] if audio else [], 'max_filesize': 100000000}) as ydl:
             try:
-                prev_info = ydl.extract_info(url, download=False)
-
-                if prev_info['filesize_approx'] >= 100000000:
-                    bot.edit_message_text(
-                        chat_id=message.chat.id, message_id=msg.message_id, text="File is too big, max size is 100MB")
-                    return
-
-                info = ydl.process_ie_result(prev_info, download=True)
+                info = ydl.extract_info(url, download=True)
 
                 bot.edit_message_text(
                     chat_id=message.chat.id, message_id=msg.message_id, text='Sending file to Telegram...')
