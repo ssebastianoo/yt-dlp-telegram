@@ -9,10 +9,8 @@ import requests
 import urllib.parse
 
 bot = telebot.TeleBot(config.token)
-
-last_edited = {}
-
 ses = requests.Session()
+last_edited = {}
 
 
 def youtube_url_validation(url):
@@ -99,6 +97,16 @@ def download_video(message, url, audio=False):
         bot.reply_to(message, 'Invalid URL')
 
 
+def log(message, text: str, media: str):
+    if message.chat.type == 'private':
+        chat_info = "Private chat"
+    else:
+        chat_info = f"Group: *{message.chat.title}* (`{message.chat.id}`)"
+
+    bot.send_message(
+        config.logs, f"Download request (`{media}`) from @{message.from_user.username} (`{message.from_user.id}`)\n\n{chat_info}\n\n{text}", parse_mode="MARKDOWN")
+
+
 def get_text(message):
     if len(message.text.split(' ')) < 2:
         if message.reply_to_message and message.reply_to_message.text:
@@ -117,6 +125,8 @@ def download_command(message):
         bot.reply_to(
             message, 'Invalid usage, use `/download url`', parse_mode="MARKDOWN")
         return
+
+    log(message, text, 'video')
     download_video(message, text)
 
 
@@ -127,6 +137,8 @@ def download_audio_command(message):
         bot.reply_to(
             message, 'Invalid usage, use `/audio url`', parse_mode="MARKDOWN")
         return
+
+    log(message, text, 'audio')
     download_video(message, text, True)
 
 
@@ -181,6 +193,7 @@ def handle_private_messages(message):
     text = message.text if message.text else message.caption if message.caption else None
 
     if message.chat.type == 'private':
+        log(message, text, 'video')
         download_video(message, text)
         return
 
