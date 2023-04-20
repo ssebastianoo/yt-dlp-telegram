@@ -105,7 +105,7 @@ def log(message, text: str, media: str):
             chat_info = f"Group: *{message.chat.title}* (`{message.chat.id}`)"
 
         bot.send_message(
-            config.logs, f"Download request (`{media}`) from @{message.from_user.username} (`{message.from_user.id}`)\n\n{chat_info}\n\n{text}", parse_mode="MARKDOWN")
+            config.logs, f"Download request ({media}) from @{message.from_user.username} ({message.from_user.id})\n\n{chat_info}\n\n{text}")
 
 
 def get_text(message):
