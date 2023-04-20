@@ -67,7 +67,15 @@ def download_video(message, url, audio=False):
             'preferredcodec': 'mp3',
         }] if audio else []}) as ydl:
             try:
-                info = ydl.extract_info(url, download=True)
+                prev_info = ydl.extract_info(url, download=False)
+
+                if prev_info['filesize_approx'] >= 100000000:
+                    bot.edit_message_text(
+                        chat_id=message.chat.id, message_id=msg.message_id, text="File is too big, max size is 100MB")
+                    return
+
+                info = ydl.process_ie_result(prev_info, download=True)
+
                 bot.edit_message_text(
                     chat_id=message.chat.id, message_id=msg.message_id, text='Sending file to Telegram...')
                 try:
@@ -84,8 +92,8 @@ def download_video(message, url, audio=False):
                     bot.edit_message_text(
                         chat_id=message.chat.id, message_id=msg.message_id, text="Couldn't send file")
 
-                for file in info['requested_downloads']:
-                    os.remove(file['filepath'])
+                # for file in info['requested_downloads']:
+                    # os.remove(file['filepath'])
             except Exception as e:
                 if isinstance(e, yt_dlp.utils.DownloadError):
                     bot.edit_message_text(
