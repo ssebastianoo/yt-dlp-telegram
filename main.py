@@ -7,7 +7,6 @@ import re
 import os
 
 bot = telebot.TeleBot(config.token)
-
 last_edited = {}
 
 
@@ -63,9 +62,10 @@ def download_video(message, url, audio=False):
         with yt_dlp.YoutubeDL({'format': 'mp4', 'outtmpl': 'outputs/%(title)s.%(ext)s', 'progress_hooks': [progress], 'postprocessors': [{  # Extract audio using ffmpeg
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
-        }] if audio else []}) as ydl:
+        }] if audio else [], 'max_filesize': config.max_filesize}) as ydl:
             try:
                 info = ydl.extract_info(url, download=True)
+
                 bot.edit_message_text(
                     chat_id=message.chat.id, message_id=msg.message_id, text='Sending file to Telegram...')
                 try:
@@ -78,12 +78,11 @@ def download_video(message, url, audio=False):
                             info['requested_downloads'][0]['filepath'], 'rb'), reply_to_message_id=message.message_id)
                     bot.delete_message(message.chat.id, msg.message_id)
                 except Exception as e:
-                    print(e)
                     bot.edit_message_text(
-                        chat_id=message.chat.id, message_id=msg.message_id, text="Couldn't send file")
-
-                for file in info['requested_downloads']:
-                    os.remove(file['filepath'])
+                        chat_id=message.chat.id, message_id=msg.message_id, text=f"Couldn't send file, make sure it's supported by Telegram and it doesn't exceed *{round(config.max_filesize / 1000000)}MB*", parse_mode="MARKDOWN")
+                else:
+                    for file in info['requested_downloads']:
+                        os.remove(file['filepath'])
             except Exception as e:
                 if isinstance(e, yt_dlp.utils.DownloadError):
                     bot.edit_message_text(
@@ -95,43 +94,60 @@ def download_video(message, url, audio=False):
         bot.reply_to(message, 'Invalid URL')
 
 
-@bot.message_handler(commands=['download'])
-def download_command(message):
-    text = ''
+def log(message, text: str, media: str):
+    if config.logs:
+        if message.chat.type == 'private':
+            chat_info = "Private chat"
+        else:
+            chat_info = f"Group: *{message.chat.title}* (`{message.chat.id}`)"
+
+        bot.send_message(
+            config.logs, f"Download request ({media}) from @{message.from_user.username} ({message.from_user.id})\n\n{chat_info}\n\n{text}")
+
+
+def get_text(message):
     if len(message.text.split(' ')) < 2:
         if message.reply_to_message and message.reply_to_message.text:
-            text = message.reply_to_message.text
+            return message.reply_to_message.text
 
         else:
-            bot.reply_to(
-                message, 'Invalid usage, use `/download url`', parse_mode="MARKDOWN")
-            return
+            return None
     else:
-        text = message.text.split(' ')[1]
+        return message.text.split(' ')[1]
+
+
+@bot.message_handler(commands=['download'])
+def download_command(message):
+    text = get_text(message)
+    if not text:
+        bot.reply_to(
+            message, 'Invalid usage, use `/download url`', parse_mode="MARKDOWN")
+        return
+
+    log(message, text, 'video')
     download_video(message, text)
 
 
 @bot.message_handler(commands=['audio'])
 def download_audio_command(message):
-    text = ''
-    if len(message.text.split(' ')) < 2:
-        if message.reply_to_message and message.reply_to_message.text:
-            text = message.reply_to_message.text
+    text = get_text(message)
+    if not text:
+        bot.reply_to(
+            message, 'Invalid usage, use `/audio url`', parse_mode="MARKDOWN")
+        return
 
-        else:
-            bot.reply_to(
-                message, 'Invalid usage, use `/download url`', parse_mode="MARKDOWN")
-            return
-    else:
-        text = message.text.split(' ')[1]
+    log(message, text, 'audio')
     download_video(message, text, True)
 
 
 @bot.message_handler(func=lambda m: True, content_types=["text", "pinned_message", "photo", "audio", "video", "location", "contact", "voice", "document"])
 def handle_private_messages(message):
     text = message.text if message.text else message.caption if message.caption else None
+
     if message.chat.type == 'private':
+        log(message, text, 'video')
         download_video(message, text)
+        return
 
 
 bot.infinity_polling()
