@@ -65,7 +65,7 @@ def download_video(message, url, audio=False):
         with yt_dlp.YoutubeDL({'format': 'mp4', 'outtmpl': 'outputs/%(title)s.%(ext)s', 'progress_hooks': [progress], 'postprocessors': [{  # Extract audio using ffmpeg
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
-        }] if audio else [], 'max_filesize': 100000000}) as ydl:
+        }] if audio else [], 'max_filesize': config.max_filesize}) as ydl:
             try:
                 info = ydl.extract_info(url, download=True)
 
@@ -81,12 +81,11 @@ def download_video(message, url, audio=False):
                             info['requested_downloads'][0]['filepath'], 'rb'), reply_to_message_id=message.message_id)
                     bot.delete_message(message.chat.id, msg.message_id)
                 except Exception as e:
-                    print(e)
                     bot.edit_message_text(
-                        chat_id=message.chat.id, message_id=msg.message_id, text="Couldn't send file")
-
-                # for file in info['requested_downloads']:
-                    # os.remove(file['filepath'])
+                        chat_id=message.chat.id, message_id=msg.message_id, text=f"Couldn't send file, make sure it's supported by Telegram and it doesn't exceed *{config.max_filesize / 1000000}MB*", parse_mode="MARKDOWN")
+                else:
+                    for file in info['requested_downloads']:
+                        os.remove(file['filepath'])
             except Exception as e:
                 if isinstance(e, yt_dlp.utils.DownloadError):
                     bot.edit_message_text(
