@@ -82,7 +82,7 @@ def download_video(message, url, audio=False):
                     bot.delete_message(message.chat.id, msg.message_id)
                 except Exception as e:
                     bot.edit_message_text(
-                        chat_id=message.chat.id, message_id=msg.message_id, text=f"Couldn't send file, make sure it's supported by Telegram and it doesn't exceed *{config.max_filesize / 1000000}MB*", parse_mode="MARKDOWN")
+                        chat_id=message.chat.id, message_id=msg.message_id, text=f"Couldn't send file, make sure it's supported by Telegram and it doesn't exceed *{round(config.max_filesize / 1000000)}MB*", parse_mode="MARKDOWN")
                 else:
                     for file in info['requested_downloads']:
                         os.remove(file['filepath'])
