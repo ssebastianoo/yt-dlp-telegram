@@ -82,6 +82,8 @@ def download_video(message, url, audio=False, format_id="mp4"):
                 except Exception as e:
                     bot.edit_message_text(
                         chat_id=message.chat.id, message_id=msg.message_id, text=f"Couldn't send file, make sure it's supported by Telegram and it doesn't exceed *{round(config.max_filesize / 1000000)}MB*", parse_mode="MARKDOWN")
+                    for file in info['requested_downloads']:
+                        os.remove(file['filepath'])
                 else:
                     for file in info['requested_downloads']:
                         os.remove(file['filepath'])
@@ -150,6 +152,8 @@ def custom(message):
             message, 'Invalid usage, use `/custom url`', parse_mode="MARKDOWN")
         return
 
+    msg = bot.reply_to(message, 'Getting formats...')
+
     with yt_dlp.YoutubeDL() as ydl:
         info = ydl.extract_info(text, download=False)
 
@@ -158,14 +162,19 @@ def custom(message):
 
     markup = quick_markup(data, row_width=2)
 
+    bot.delete_message(msg.chat.id, msg.message_id)
     bot.reply_to(message, "Choose a format", reply_markup=markup)
 
 
 @bot.callback_query_handler(func=lambda call: True)
-def test_callback(call):
-    url = get_text(call.message.reply_to_message)
-    download_video(call.message.reply_to_message, url,
-                   format_id=f"{call.data}+bestaudio")
+def callback(call):
+    if call.from_user.id == call.message.reply_to_message.from_user.id:
+        url = get_text(call.message.reply_to_message)
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        download_video(call.message.reply_to_message, url,
+                       format_id=f"{call.data}+bestaudio")
+    else:
+        bot.answer_callback_query(call.id, "You didn't send the request")
 
 
 @bot.message_handler(func=lambda m: True, content_types=["text", "pinned_message", "photo", "audio", "video", "location", "contact", "voice", "document"])
