@@ -3,8 +3,11 @@ import datetime
 import telebot
 import config
 import yt_dlp
+import json
 import re
 import os
+from telebot import types
+from telebot.util import quick_markup
 
 bot = telebot.TeleBot(config.token)
 last_edited = {}
@@ -29,7 +32,7 @@ def test(message):
         message, "*Send me a video link* and I'll download it for you, works with *YouTube*, *Twitter*, *TikTok*, *Reddit* and more.\n\n_Powered by_ [yt-dlp](https://github.com/yt-dlp/yt-dlp/)", parse_mode="MARKDOWN", disable_web_page_preview=True)
 
 
-def download_video(message, url, audio=False):
+def download_video(message, url, audio=False, format_id="mp4"):
     url_info = urlparse(url)
     if url_info.scheme:
         if url_info.netloc in ['www.youtube.com', 'youtu.be', 'youtube.com', 'youtu.be']:
@@ -59,7 +62,7 @@ def download_video(message, url, audio=False):
                     print(e)
 
         msg = bot.reply_to(message, 'Downloading...')
-        with yt_dlp.YoutubeDL({'format': 'mp4', 'outtmpl': 'outputs/%(title)s.%(ext)s', 'progress_hooks': [progress], 'postprocessors': [{  # Extract audio using ffmpeg
+        with yt_dlp.YoutubeDL({'format': format_id, 'outtmpl': 'outputs/%(title)s.%(ext)s', 'progress_hooks': [progress], 'postprocessors': [{  # Extract audio using ffmpeg
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
         }] if audio else [], 'max_filesize': config.max_filesize}) as ydl:
@@ -138,6 +141,35 @@ def download_audio_command(message):
 
     log(message, text, 'audio')
     download_video(message, text, True)
+
+
+@bot.message_handler(commands=['custom'])
+def custom(message):
+    text = get_text(message)
+    if not text:
+        bot.reply_to(
+            message, 'Invalid usage, use `/custom url`', parse_mode="MARKDOWN")
+        return
+
+    with yt_dlp.YoutubeDL() as ydl:
+        info = ydl.extract_info(text, download=False)
+
+    with open('a.json', 'w') as f:
+        json.dump(info, f, indent=4)
+
+    data = {f"{x['resolution']}.{x['ext']}": {
+        'callback_data': f"{x['format_id']}"} for x in info['formats'] if x['video_ext'] != 'none'}
+
+    markup = quick_markup(data, row_width=2)
+
+    bot.reply_to(message, "Choose a format", reply_markup=markup)
+
+
+@bot.callback_query_handler(func=lambda call: True)
+def test_callback(call):
+    url = get_text(call.message.reply_to_message)
+    download_video(call.message.reply_to_message, url,
+                   format_id=f"{call.data}+bestaudio")
 
 
 @bot.message_handler(func=lambda m: True, content_types=["text", "pinned_message", "photo", "audio", "video", "location", "contact", "voice", "document"])
