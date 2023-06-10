@@ -3,7 +3,6 @@ import datetime
 import telebot
 import config
 import yt_dlp
-import json
 import re
 import os
 from telebot import types
@@ -153,9 +152,6 @@ def custom(message):
 
     with yt_dlp.YoutubeDL() as ydl:
         info = ydl.extract_info(text, download=False)
-
-    with open('a.json', 'w') as f:
-        json.dump(info, f, indent=4)
 
     data = {f"{x['resolution']}.{x['ext']}": {
         'callback_data': f"{x['format_id']}"} for x in info['formats'] if x['video_ext'] != 'none'}
