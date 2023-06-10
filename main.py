@@ -152,23 +152,29 @@ def custom(message):
             message, 'Invalid usage, use `/custom url`', parse_mode="MARKDOWN")
         return
 
+    msg = bot.reply_to(message, 'Getting formats...')
+
     with yt_dlp.YoutubeDL() as ydl:
         info = ydl.extract_info(text, download=False)
-
 
     data = {f"{x['resolution']}.{x['ext']}": {
         'callback_data': f"{x['format_id']}"} for x in info['formats'] if x['video_ext'] != 'none'}
 
     markup = quick_markup(data, row_width=2)
 
+    bot.delete_message(msg.chat.id, msg.message_id)
     bot.reply_to(message, "Choose a format", reply_markup=markup)
 
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
-    url = get_text(call.message.reply_to_message)
-    download_video(call.message.reply_to_message, url,
-                   format_id=f"{call.data}+bestaudio")
+    if call.from_user.id == call.message.reply_to_message.from_user.id:
+        url = get_text(call.message.reply_to_message)
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        download_video(call.message.reply_to_message, url,
+                       format_id=f"{call.data}+bestaudio")
+    else:
+        bot.answer_callback_query(call.id, "You didn't send the request")
 
 
 @bot.message_handler(commands=['define', 'urban', 'definisci', 'dictionary', 'dizionario'])
