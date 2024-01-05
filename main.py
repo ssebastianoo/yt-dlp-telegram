@@ -7,6 +7,7 @@ import re
 import os
 from telebot import types
 from telebot.util import quick_markup
+import time
 
 bot = telebot.TeleBot(config.token)
 last_edited = {}
@@ -15,8 +16,8 @@ last_edited = {}
 def youtube_url_validation(url):
     youtube_regex = (
         r'(https?://)?(www\.)?'
-        '(youtube|youtu|youtube-nocookie)\.(com|be)/'
-        '(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})')
+        r'(youtube|youtu|youtube-nocookie)\.(com|be)/'
+        r'(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})')
 
     youtube_regex_match = re.match(youtube_regex, url)
     if youtube_regex_match:
@@ -61,13 +62,13 @@ def download_video(message, url, audio=False, format_id="mp4"):
                     print(e)
 
         msg = bot.reply_to(message, 'Downloading...')
-        with yt_dlp.YoutubeDL({'format': format_id, 'outtmpl': 'outputs/%(title)s.%(ext)s', 'progress_hooks': [progress], 'postprocessors': [{  # Extract audio using ffmpeg
+        video_title = round(time.time() * 1000)
+        with yt_dlp.YoutubeDL({'format': format_id, 'outtmpl': f'outputs/{video_title}.%(ext)s', 'progress_hooks': [progress], 'postprocessors': [{  # Extract audio using ffmpeg
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
         }] if audio else [], 'max_filesize': config.max_filesize}) as ydl:
+            info = ydl.extract_info(url, download=True)
             try:
-                info = ydl.extract_info(url, download=True)
-
                 bot.edit_message_text(
                     chat_id=message.chat.id, message_id=msg.message_id, text='Sending file to Telegram...')
                 try:
@@ -93,8 +94,11 @@ def download_video(message, url, audio=False, format_id="mp4"):
                         'Invalid URL', message.chat.id, msg.message_id)
                 else:
                     bot.edit_message_text(
-                        'There was an error downloading your video', message.chat.id, msg.message_id)
-    else:
+                        f"There was an error downloading your video, make sure it doesn't exceed *{round(config.max_filesize / 1000000)}MB*", message.chat.id, msg.message_id, parse_mode="MARKDOWN")
+                for file in os.listdir('outputs'):
+                    if file.startswith(str(video_title)):
+                        os.remove(f'outputs/{file}')
+    else: 
         bot.reply_to(message, 'Invalid URL')
 
 
