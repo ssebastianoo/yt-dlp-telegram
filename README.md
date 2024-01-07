@@ -16,3 +16,7 @@ create a `config.py` file and set the `token` variable to your bot token (check 
 ```py
 python3 main.py
 ```
+
+**The Telegram API limits files sent by bots to 50mb**
+
+**https://core.telegram.org/bots/faq#how-do-i-upload-a-large-file**

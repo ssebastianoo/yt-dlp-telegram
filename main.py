@@ -7,25 +7,25 @@ import re
 import os
 import requests
 import urllib.parse
+from telebot import types
 from telebot.util import quick_markup
+import time
 
-bot = telebot.TeleBot(config.token)
 ses = requests.Session()
+bot = telebot.TeleBot(config.token)
 last_edited = {}
-
 
 def youtube_url_validation(url):
     youtube_regex = (
         r'(https?://)?(www\.)?'
-        '(youtube|youtu|youtube-nocookie)\.(com|be)/'
-        '(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})')
+        r'(youtube|youtu|youtube-nocookie)\.(com|be)/'
+        r'(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})')
 
     youtube_regex_match = re.match(youtube_regex, url)
     if youtube_regex_match:
         return youtube_regex_match
 
     return youtube_regex_match
-
 
 @bot.message_handler(commands=['start', 'help'])
 def test(message):
@@ -63,13 +63,13 @@ def download_video(message, url, audio=False, format_id="mp4"):
                     print(e)
 
         msg = bot.reply_to(message, 'Downloading...')
-        with yt_dlp.YoutubeDL({'format': format_id, 'outtmpl': 'outputs/%(title)s.%(ext)s', 'progress_hooks': [progress], 'postprocessors': [{  # Extract audio using ffmpeg
+        video_title = round(time.time() * 1000)
+        with yt_dlp.YoutubeDL({'format': format_id, 'outtmpl': f'outputs/{video_title}.%(ext)s', 'progress_hooks': [progress], 'postprocessors': [{  # Extract audio using ffmpeg
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
         }] if audio else [], 'max_filesize': config.max_filesize}) as ydl:
+            info = ydl.extract_info(url, download=True)
             try:
-                info = ydl.extract_info(url, download=True)
-
                 bot.edit_message_text(
                     chat_id=message.chat.id, message_id=msg.message_id, text='Sending file to Telegram...')
                 try:
@@ -84,6 +84,8 @@ def download_video(message, url, audio=False, format_id="mp4"):
                 except Exception as e:
                     bot.edit_message_text(
                         chat_id=message.chat.id, message_id=msg.message_id, text=f"Couldn't send file, make sure it's supported by Telegram and it doesn't exceed *{round(config.max_filesize / 1000000)}MB*", parse_mode="MARKDOWN")
+                    for file in info['requested_downloads']:
+                        os.remove(file['filepath'])
                 else:
                     for file in info['requested_downloads']:
                         os.remove(file['filepath'])
@@ -93,8 +95,11 @@ def download_video(message, url, audio=False, format_id="mp4"):
                         'Invalid URL', message.chat.id, msg.message_id)
                 else:
                     bot.edit_message_text(
-                        'There was an error downloading your video', message.chat.id, msg.message_id)
-    else:
+                        f"There was an error downloading your video, make sure it doesn't exceed *{round(config.max_filesize / 1000000)}MB*", message.chat.id, msg.message_id, parse_mode="MARKDOWN")
+                for file in os.listdir('outputs'):
+                    if file.startswith(str(video_title)):
+                        os.remove(f'outputs/{file}')
+    else: 
         bot.reply_to(message, 'Invalid URL')
 
 
@@ -113,7 +118,6 @@ def get_text(message):
     if len(message.text.split(' ')) < 2:
         if message.reply_to_message and message.reply_to_message.text:
             return message.reply_to_message.text
-
         else:
             return None
     else:
@@ -176,7 +180,6 @@ def callback(call):
     else:
         bot.answer_callback_query(call.id, "You didn't send the request")
 
-
 @bot.message_handler(commands=['define', 'urban', 'definisci', 'dictionary', 'dizionario'])
 def define(message):
     text = get_text(message)
@@ -191,7 +194,6 @@ def define(message):
         bot.reply_to(message, data['list'][0]['definition'])
     else:
         bot.reply_to(message, "No results found")
-
 
 shortcuts = {
     "smh": "shake my head",
@@ -249,7 +251,9 @@ def handle_private_messages(message):
         bot.send_video(message.chat.id, 'BAACAgQAAx0CW_bolQACd8ljEeYX0Ub3EQphxa2xmV6HUcDoOAACzA0AAnCIkFCE3KhF14BM7SkE',
                        reply_to_message_id=message.message_id)
     if message.chat.type == 'private':
+        log(message, text, 'video')
         download_video(message, text)
+        return
 
 
 bot.infinity_polling()
