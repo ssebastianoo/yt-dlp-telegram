@@ -169,6 +169,25 @@ def custom(message):
     bot.delete_message(msg.chat.id, msg.message_id)
     bot.reply_to(message, "Choose a format", reply_markup=markup)
 
+@bot.message_handler(commands=['gnu'])
+def gnu(message):
+    words = message.text.split(' ')
+    if len(words) < 2:
+        bot.reply_to(message, 'cacati ≥adoso')
+        return
+    words.pop(0)
+    word = " ".join(words)
+
+    text = f"""
+I'd just like to interject for a moment. What you're refering to as {word}, is in fact, GNU/{word}, or as I've recently taken to calling it, GNU plus {word}. {word} is not an operating system unto itself, but rather another free component of a fully functioning GNU system made useful by the GNU corelibs, shell utilities and vital system components comprising a full OS as defined by POSIX.
+
+Many computer users run a modified version of the GNU system every day, without realizing it. Through a peculiar turn of events, the version of GNU which is widely used today is often called {word}, and many of its users are not aware that it is basically the GNU system, developed by the GNU Project.
+
+There really is a {word}, and these people are using it, but it is just a part of the system they use. {word} is the kernel: the program in the system that allocates the machine's resources to the other programs that you run. The kernel is an essential part of an operating system, but useless by itself; it can only function in the context of a complete operating system. {word} is normally used in combination with the GNU operating system: the whole system is basically GNU with {word} added, or GNU/{word}. All the so-called {word} distributions are really distributions of GNU/{word}!
+"""
+    bot.reply_to(message, text)
+
+
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
