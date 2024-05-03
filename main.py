@@ -187,6 +187,9 @@ There really is a {word}, and these people are using it, but it is just a part o
 """
     bot.reply_to(message, text)
 
+@bot.message_handler(commands=['id'])
+def get_chat_id(message):
+    bot.reply_to(message, message.chat.id)
 
 
 @bot.callback_query_handler(func=lambda call: True)
