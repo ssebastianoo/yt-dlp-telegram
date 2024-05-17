@@ -250,6 +250,8 @@ shortcuts = {
 def handle_private_messages(message):
     text = message.text if message.text else message.caption if message.caption else None
 
+    print(message)
+
     if message.chat.type == 'private':
         log(message, text, 'video')
         download_video(message, text)
@@ -269,13 +271,16 @@ def handle_private_messages(message):
     if text and 'furry' in text.lower():
         bot.send_sticker(message.chat.id, config.sticker_id,
                          reply_to_message_id=message.message_id)
+        
     if text and 'whatsapp' in text.lower():
         bot.send_video(message.chat.id, 'BAACAgQAAx0CW_bolQACd8ljEeYX0Ub3EQphxa2xmV6HUcDoOAACzA0AAnCIkFCE3KhF14BM7SkE',
                        reply_to_message_id=message.message_id)
 
     if text and 'caparezza' in text.lower():
-        bot.reply_to(message, "‼️‼️OH CAZZO OH MERDA ‼️‼️‼️‼️ È QUESTA UNA FOTTUTA CITAZIONE A CAPAREZZA??????!!!!!!!!!!11!1!1!1!1!1!1! 😱😱😱😱😱😱😱 CAPAREZZA È IL PIÙ GRANDE FOTTUTO RAPPER 🔥🔥🔥🔥💯💯💯💯 EXUVIA È COSÌ FORTE 😎😎😎😎😎😎😎👊👊👊👊👊 TUSEIPAZZOMUCAVANGOGHTUSEIPAZZOMICAVANGOGH 😩😩😩😩😩😩😩😩 😩😩😩😩 SONOFUORIDALTUNNELELELELELDELDIVERTIMENTOOOHOHOOHOHO 🤬😡🤬😡🤬😡🤬🤬😡🤬🤬😡CAPASOUUUUUUUUUUUUUUUUND caparezza non mi piace perchè troppo politico!🗿 troppo politico!🗿 🗿 troppo politico!🗿 🗿 troppo politico!🗿 🗿 troppo politico!🗿 🗿 🗿 🗿 🗿 🗿 🗿")    
-    
+        # bot.reply_to(message, "‼️‼️OH CAZZO OH MERDA ‼️‼️‼️‼️ È QUESTA UNA FOTTUTA CITAZIONE A CAPAREZZA??????!!!!!!!!!!11!1!1!1!1!1!1! 😱😱😱😱😱😱😱 CAPAREZZA È IL PIÙ GRANDE FOTTUTO RAPPER 🔥🔥🔥🔥💯💯💯💯 EXUVIA È COSÌ FORTE 😎😎😎😎😎😎😎👊👊👊👊👊 TUSEIPAZZOMUCAVANGOGHTUSEIPAZZOMICAVANGOGH 😩😩😩😩😩😩😩😩 😩😩😩😩 SONOFUORIDALTUNNELELELELELDELDIVERTIMENTOOOHOHOOHOHO 🤬😡🤬😡🤬😡🤬🤬😡🤬🤬😡CAPASOUUUUUUUUUUUUUUUUND caparezza non mi piace perchè troppo politico!🗿 troppo politico!🗿 🗿 troppo politico!🗿 🗿 troppo politico!🗿 🗿 troppo politico!🗿 🗿 🗿 🗿 🗿 🗿 🗿")    
+        bot.send_voice(message.chat.id, config.voice_id,   reply_to_message_id=message.message_id)
+
+
     if message.chat.type == 'private':
         log(message, text, 'video')
         download_video(message, text)
