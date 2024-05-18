@@ -250,8 +250,6 @@ shortcuts = {
 def handle_private_messages(message):
     text = message.text if message.text else message.caption if message.caption else None
 
-    print(message)
-
     if message.chat.type == 'private':
         log(message, text, 'video')
         download_video(message, text)
