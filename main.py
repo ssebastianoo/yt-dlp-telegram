@@ -8,7 +8,6 @@ import os
 from telebot import types
 from telebot.util import quick_markup
 import time
-import json
 
 bot = telebot.TeleBot(config.token)
 last_edited = {}
@@ -70,9 +69,6 @@ def download_video(message, url, audio=False, format_id="mp4"):
             'preferredcodec': 'mp3',
         }] if audio else [], 'max_filesize': config.max_filesize}) as ydl:
             info = ydl.extract_info(url, download=True)
-
-            with open('dump.json', 'w') as f:
-                json.dump(info, f)
 
             try:
                 bot.edit_message_text(
