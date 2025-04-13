@@ -65,7 +65,7 @@ def download_video(message, url, audio=False, format_id="mp4"):
         msg = bot.reply_to(message, 'Downloading...')
         video_title = round(time.time() * 1000)
 
-        with yt_dlp.YoutubeDL({'format': format_id, 'outtmpl': f'outputs/{video_title}.%(ext)s', 'progress_hooks': [progress], 'postprocessors': [{  # Extract audio using ffmpeg
+        with yt_dlp.YoutubeDL({'format': format_id, 'outtmpl': f'{config.output_folder}/{video_title}.%(ext)s', 'progress_hooks': [progress], 'postprocessors': [{  # Extract audio using ffmpeg
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
         }] if audio else [], 'max_filesize': config.max_filesize}) as ydl:
@@ -97,9 +97,9 @@ def download_video(message, url, audio=False, format_id="mp4"):
                 else:
                     bot.edit_message_text(
                         f"There was an error downloading your video, make sure it doesn't exceed *{round(config.max_filesize / 1000000)}MB*", message.chat.id, msg.message_id, parse_mode="MARKDOWN")
-        for file in os.listdir('outputs'):
+        for file in os.listdir(config.output_folder):
             if file.startswith(str(video_title)):
-                os.remove(f'outputs/{file}')
+                os.remove(f'{config.output_folder}/{file}')
     else: 
         bot.reply_to(message, 'Invalid URL')
 
