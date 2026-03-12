@@ -11,6 +11,8 @@ from telebot import types
 from telebot.util import quick_markup
 import time
 
+os.makedirs(config.output_folder, exist_ok=True)
+
 ses = requests.Session()
 bot = telebot.TeleBot(config.token)
 last_edited = {}
