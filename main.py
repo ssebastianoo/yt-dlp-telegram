@@ -96,12 +96,12 @@ def download_video(message, content, audio=False, format_id="mp4"):
                         perc = round(d['downloaded_bytes'] *
                                      100 / d['total_bytes'])
                         bot.edit_message_text(
-                            chat_id=message.chat.id, message_id=msg.message_id, text=f"Downloading {d['info_dict']['title']}\n\n{perc}%")
+                            chat_id=message.chat.id, message_id=msg.message_id, text=f"Downloading {d['info_dict']['title']}\n\n{perc}%\n\n<i>Want to stay updated? @SatoruStatus</i>", parse_mode="HTML")
                         last_edited[f"{message.chat.id}-{msg.message_id}"] = datetime.datetime.now()
                 except Exception as e:
                     print(e)
 
-        msg = bot.reply_to(message, 'Downloading...')
+        msg = bot.reply_to(message, 'Downloading...\n\n<i>Want to stay updated? @SatoruStatus</i>', parse_mode="HTML")
         video_title = round(time.time() * 1000)
 
         with yt_dlp.YoutubeDL({'format': format_id, 'outtmpl': f'{config.output_folder}/{video_title}.%(ext)s', 'progress_hooks': [progress], 'postprocessors': [{  # Extract audio using ffmpeg
