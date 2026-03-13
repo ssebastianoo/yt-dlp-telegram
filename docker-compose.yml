@@ -1,0 +1,6 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - ./config.py:/app/config.py:ro

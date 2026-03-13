@@ -1,22 +1,284 @@
 # YT-DLP Telegram Bot
-Telegram bot that allows you to download videos from YouTube, Twitter, Reddit and many other socials using [yt-dlp](https://github.com/yt-dlp/yt-dlp) 
 
-[Use the Bot](https://t.me/SatoruBot)
+A Telegram bot that downloads media using [yt-dlp](https://github.com/yt-dlp/yt-dlp), with support for:
 
-## Usage
-In the bot private chat just send the video url, otherwise use `/download <url>`
+- YouTube
+- TikTok
+- Instagram
+- Twitter / X
+- Bluesky
 
-## Self hosting
+Send a link and the bot fetches the media and uploads it back to Telegram.
+
+> Public bot: [@SatoruBot](https://t.me/SatoruBot)
+
+---
+
+## Features
+
+- Download video with `/download <url>`
+- Download audio (MP3 extract) with `/audio <url>`
+- Choose custom format with `/custom <url>`
+- Optional logging to a Telegram chat/channel
+- Domain allowlist for safer URL handling
+- Docker support with `docker-compose`
+
+---
+
+## Commands
+
+- `/start` or `/help` — Show usage help
+- `/download <url>` — Download video
+- `/audio <url>` — Download and extract MP3
+- `/custom <url>` — Show available formats and pick one
+- `/id` — Return current chat ID (useful for `logs` config)
+
+In private chat, you can also just send a URL directly.
+
+---
+
+## Requirements
+
+### Local run
+
+- Python 3.11+
+- `ffmpeg` installed on your system
+- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+
+### Docker run
+
+- Docker
+- Docker Compose plugin (`docker compose`)
+
+---
+
+## Quick Start (Local)
+
+1. Clone the repo:
+   ```bash
+   git clone https://github.com/ssebastianoo/yt-dlp-telegram
+   cd yt-dlp-telegram
+   ```
+
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Create `config.py` from the example:
+   ```bash
+   cp example.config.py config.py
+   ```
+
+4. Edit `config.py` (at minimum set `token`).
+
+5. Start the bot:
+   ```bash
+   python3 main.py
+   ```
+
+If everything is correct, you should see output similar to:
+`ready as @your_bot_username`
+
+---
+
+## Configuration Reference (`config.py`)
+
+Create a `config.py` file in the project root.  
+All supported flags are:
+
+### `token: str`
+Telegram bot token from BotFather.
+
+- **Required:** Yes
+- **Example:** `"123456789:ABCDEF..."`
+
+---
+
+### `logs: int | None`
+Chat ID where the bot sends download logs.
+
+- **Required:** No
+- **Default:** `None` (disabled)
+- **How to get ID:** run `/id` in target chat
+- **Notes:**  
+  - For channels/groups, ensure bot is added and allowed to post.
+  - Use numeric chat ID (can be negative for supergroups/channels).
+
+---
+
+### `max_filesize: int`
+Maximum allowed media size in **bytes** for yt-dlp download.
+
+- **Required:** No
+- **Default in example:** `50000000` (~50 MB)
+- **Important:** Telegram Bot API has upload limits for bots. Keep this aligned with your practical Telegram limit and deployment constraints.
+
+---
+
+### `output_folder: str`
+Directory used for temporary downloaded files.
+
+- **Required:** No
+- **Default in example:** `"/tmp/satoru"`
+- **Behavior:**  
+  - Created automatically on startup if missing.
+  - Files are cleaned after each request.
+
+---
+
+### `allowed_domains: list[str]`
+Allowlist of domains the bot accepts for downloads.
+
+- **Required:** No
+- **Default:** Includes YouTube, TikTok, Instagram, Twitter/X, Bluesky variants.
+- **Security note:** Keep this restrictive to avoid unexpected extractor behavior on unrelated websites.
+
+---
+
+## Example `config.py`
+
+```python
+# The telegram bot token
+token: str = "123456789:ABcdefGhiJKlmnO"
+
+# The logs channel id, if none set to None
+logs: int | None = None
+
+# The maximum file size in bytes
+max_filesize: int = 50000000
+
+# The output folder for downloaded files, it gets cleared after each download
+output_folder: str = "/tmp/satoru"
+
+# The allowed domains for downloading videos
+allowed_domains: list[str] = [
+    "youtube.com",
+    "www.youtube.com",
+    "youtu.be",
+    "m.youtube.com",
+    "youtube-nocookie.com",
+    "tiktok.com",
+    "www.tiktok.com",
+    "vm.tiktok.com",
+    "vt.tiktok.com",
+    "instagram.com",
+    "www.instagram.com",
+    "twitter.com",
+    "www.twitter.com",
+    "x.com",
+    "www.x.com",
+    "bsky.app",
+    "www.bsky.app",
+]
+```
+
+---
+
+## Docker Tutorial
+
+This project includes:
+
+- `Dockerfile` (Python + ffmpeg + app)
+- `docker-compose.yml` (single `bot` service)
+
+### 1) Prepare config
+
+From project root:
+
 ```bash
-git clone https://github.com/ssebastianoo/yt-dlp-telegram
-cd yt-dlp-telegram
-pip install -r requirements.txt
-```
-create a `config.py` file and set the `token` variable to your bot token (check `example.config.py`)
-```py
-python3 main.py
+cp example.config.py config.py
 ```
 
-**The Telegram API limits files sent by bots to 50mb**
+Edit `config.py` and set at least:
 
-**https://core.telegram.org/bots/faq#how-do-i-upload-a-large-file**
+- `token`
+- optionally `logs`, `max_filesize`, etc.
+
+---
+
+### 2) Build and start container
+
+```bash
+docker compose up -d --build
+```
+
+This will:
+
+- build the image
+- mount your local `config.py` into container as read-only:
+  - `./config.py:/app/config.py:ro`
+- start bot with restart policy `unless-stopped`
+
+---
+
+### 3) Check logs
+
+```bash
+docker compose logs -f bot
+```
+
+Look for:
+`ready as @your_bot_username`
+
+---
+
+### 4) Stop / restart / update
+
+Stop:
+```bash
+docker compose down
+```
+
+Restart:
+```bash
+docker compose restart bot
+```
+
+Rebuild after code changes:
+```bash
+docker compose up -d --build
+```
+
+---
+
+### 5) Troubleshooting Docker setup
+
+- **Bot not starting**
+  - Verify `config.py` exists in project root.
+  - Verify `token` is valid.
+  - Check logs: `docker compose logs -f bot`.
+
+- **No logs sent to `logs` chat**
+  - Ensure bot is in that chat/channel.
+  - Ensure `logs` is correct numeric chat ID.
+  - Ensure bot has permission to send messages.
+
+- **Downloads fail due to size**
+  - Reduce quality / choose smaller format via `/custom`.
+  - Lower `max_filesize` to fail fast and avoid long downloads.
+  - Telegram limits still apply.
+
+---
+
+## Usage Notes
+
+- In private chats, paste a link directly.
+- In groups, use commands like `/download <url>`.
+- `/custom` can list many formats depending on source media.
+- Audio mode uses FFmpeg post-processing to extract MP3.
+
+---
+
+## Telegram File Size Limit
+
+Bots are limited by Telegram upload constraints.  
+Reference: https://core.telegram.org/bots/faq#how-do-i-upload-a-large-file
+
+Set `max_filesize` according to what you want the bot to attempt and what Telegram will accept in your use case.
+
+---
+
+## License
+
+This project is licensed under the repository’s `LICENSE` file.
