@@ -1,6 +1,6 @@
 # YT-DLP Telegram Bot
 
-A Telegram bot that downloads media using [yt-dlp](https://github.com/yt-dlp/yt-dlp), with support for:
+A Telegram bot that downloads media on Telegram using [yt-dlp](https://github.com/yt-dlp/yt-dlp), with support for:
 
 - YouTube
 - TikTok
@@ -8,9 +8,9 @@ A Telegram bot that downloads media using [yt-dlp](https://github.com/yt-dlp/yt-
 - Twitter / X
 - Bluesky
 
-Send a link and the bot fetches the media and uploads it back to Telegram.
-
 > Public bot: [@SatoruBot](https://t.me/SatoruBot)
+
+**Need more help?** Join the [support group](https://t.me/satorubotsupport) or the [status](https://t.me/satorustatus) channel
 
 ## Table of Contents
 
