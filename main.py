@@ -182,11 +182,15 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
 
     except (DownloadError, ExtractorError) as e:
         err = str(e).lower()
-        text = (
-            "Content not available (Rate limit or login required)"
-            if "login required" in err or "rate-limit reached" in err
-            else "Invalid URL"
-        )
+        text: str
+
+        if "[youtube]" and "Sign in" in err:
+            text = "We're sorry, YouTube is ratelimiting third party downloaders right now, try again later."
+        elif "login required" in err or "rate-limit reached" in err:
+            text = "Content not available (Rate limit or login required)."
+        else:
+            text = "There was an error downloading the video, please try again later."
+
         bot.edit_message_text(text, message.chat.id, msg.message_id)
 
     except Exception:
