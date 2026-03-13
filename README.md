@@ -20,13 +20,7 @@ Send a link and the bot fetches the media and uploads it back to Telegram.
   - [Local run](#local-run)
   - [Docker run](#docker-run)
 - [Quick Start (Local)](#quick-start-local)
-- [Configuration Reference (`config.py`)](#configuration-reference-configpy)
-  - [`token: str`](#token-str)
-  - [`logs: int | None`](#logs-int--none)
-  - [`max_filesize: int`](#max_filesize-int)
-  - [`output_folder: str`](#output_folder-str)
-  - [`allowed_domains: list[str]`](#allowed_domains-liststr)
-- [Example `config.py`](#example-configpy)
+- [Configuration Reference](#configuration-reference)
 - [Docker Tutorial](#docker-tutorial)
   - [1) Prepare config](#1-prepare-config)
   - [2) Build and start container](#2-build-and-start-container)
@@ -107,62 +101,9 @@ If everything is correct, you should see output similar to:
 
 ---
 
-## Configuration Reference (`config.py`)
+## Configuration Reference
 
-Create a `config.py` file in the project root.  
-All supported flags are:
-
-### `token: str`
-Telegram bot token from BotFather.
-
-- **Required:** Yes
-- **Example:** `"123456789:ABCDEF..."`
-
----
-
-### `logs: int | None`
-Chat ID where the bot sends download logs.
-
-- **Required:** No
-- **Default:** `None` (disabled)
-- **How to get ID:** run `/id` in target chat
-- **Notes:**  
-  - For channels/groups, ensure bot is added and allowed to post.
-  - Use numeric chat ID (can be negative for supergroups/channels).
-
----
-
-### `max_filesize: int`
-Maximum allowed media size in **bytes** for yt-dlp download.
-
-- **Required:** No
-- **Default in example:** `50000000` (~50 MB)
-- **Important:** Telegram Bot API has upload limits for bots. Keep this aligned with your practical Telegram limit and deployment constraints.
-
----
-
-### `output_folder: str`
-Directory used for temporary downloaded files.
-
-- **Required:** No
-- **Default in example:** `"/tmp/satoru"`
-- **Behavior:**  
-  - Created automatically on startup if missing.
-  - Files are cleaned after each request.
-
----
-
-### `allowed_domains: list[str]`
-Allowlist of domains the bot accepts for downloads.
-
-- **Required:** No
-- **Default:** Includes YouTube, TikTok, Instagram, Twitter/X, Bluesky variants.
-- **Security note:** Keep this restrictive to avoid unexpected extractor behavior on unrelated websites.
-
----
-
-## Example `config.py`
-
+Create a `config.py` file in the project root. `config.py` example:
 ```python
 # The telegram bot token
 token: str = "123456789:ABcdefGhiJKlmnO"
