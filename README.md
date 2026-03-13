@@ -12,6 +12,31 @@ Send a link and the bot fetches the media and uploads it back to Telegram.
 
 > Public bot: [@SatoruBot](https://t.me/SatoruBot)
 
+## Table of Contents
+
+- [Features](#features)
+- [Commands](#commands)
+- [Requirements](#requirements)
+  - [Local run](#local-run)
+  - [Docker run](#docker-run)
+- [Quick Start (Local)](#quick-start-local)
+- [Configuration Reference (`config.py`)](#configuration-reference-configpy)
+  - [`token: str`](#token-str)
+  - [`logs: int | None`](#logs-int--none)
+  - [`max_filesize: int`](#max_filesize-int)
+  - [`output_folder: str`](#output_folder-str)
+  - [`allowed_domains: list[str]`](#allowed_domains-liststr)
+- [Example `config.py`](#example-configpy)
+- [Docker Tutorial](#docker-tutorial)
+  - [1) Prepare config](#1-prepare-config)
+  - [2) Build and start container](#2-build-and-start-container)
+  - [3) Check logs](#3-check-logs)
+  - [4) Stop / restart / update](#4-stop--restart--update)
+  - [5) Troubleshooting Docker setup](#5-troubleshooting-docker-setup)
+- [Usage Notes](#usage-notes)
+- [Telegram File Size Limit](#telegram-file-size-limit)
+- [License](#license)
+
 ---
 
 ## Features
