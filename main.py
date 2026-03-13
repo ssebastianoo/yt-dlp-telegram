@@ -20,7 +20,6 @@ ses = requests.Session()
 bot = telebot.TeleBot(config.token)
 last_edited = {}
 
-
 def youtube_url_validation(url):
     youtube_regex = (
         r"(https?://)?(www\.|m\.)?"
@@ -62,6 +61,9 @@ def test(message):
         disable_web_page_preview=True,
     )
 
+def download_video(message, content, audio=False, format_id="mp4"):
+
+    url = re.search(r'https?://\S+', content).group(0) if re.search(r'https?://\S+', content) else content
 
 def _validate_url(message, url: str) -> bool:
     """Validate URL domain and YouTube-specific rules. Returns False and replies if invalid."""
@@ -201,7 +203,6 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
     finally:
         _cleanup(video_title)
 
-
 def log(message, text: str, media: str):
     if config.logs:
         if message.chat.type == "private":
@@ -213,7 +214,6 @@ def log(message, text: str, media: str):
             config.logs,
             f"Download request ({media}) from @{message.from_user.username} ({message.from_user.id})\n\n{chat_info}\n\n{text}",
         )
-
 
 def get_text(message):
     if len(message.text.split(" ")) < 2:
