@@ -184,7 +184,7 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
         err = str(e).lower()
         text: str
 
-        if "[youtube]" and "Sign in" in err:
+        if "[youtube]" in err and "sign in" in err:
             text = "We're sorry, YouTube is ratelimiting third party downloaders right now, try again later."
         elif "login required" in err or "rate-limit reached" in err:
             text = "Content not available (Rate limit or login required)."
