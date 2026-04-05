@@ -35,5 +35,5 @@ allowed_domains: list[str] = [
 secret_key: str = "your-secret-key"
 
 # this is used to solve youtube challenges, you can set it to None if you don't
-# need it or change the runtime like {"bun": {"path": "bun"}}
-js_runtime: dict[str, dict[str, str] | None] | None = {"node": {"path": "node"}}
+# need it or change the runtime like {"node": {"path": "node"}}
+js_runtime: dict[str, dict[str, str] | None] | None = {"bun": {"path": "bun"}}
