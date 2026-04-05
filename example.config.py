@@ -30,3 +30,10 @@ allowed_domains: list[str] = [
     "bsky.app",
     "www.bsky.app",
 ]
+
+# secret key used to encrypt/decrypt stores cookies
+secret_key: str = "your-secret-key"
+
+# this is used to solve youtube challenges, you can set it to None if you don't
+# need it or change the runtime like {"bun": {"path": "bun"}}
+js_runtime: dict[str, dict[str, str] | None] | None = {"node": {"path": "node"}}

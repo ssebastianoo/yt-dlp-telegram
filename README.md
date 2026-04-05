@@ -29,6 +29,7 @@ A Telegram bot that downloads media on Telegram using [yt-dlp](https://github.co
   - [5) Troubleshooting Docker setup](#5-troubleshooting-docker-setup)
 - [Usage Notes](#usage-notes)
 - [Telegram File Size Limit](#telegram-file-size-limit)
+- [Cookies Support](#cookies-support)
 - [License](#license)
 
 ---
@@ -38,6 +39,7 @@ A Telegram bot that downloads media on Telegram using [yt-dlp](https://github.co
 - Download video with `/download <url>`
 - Download audio (MP3 extract) with `/audio <url>`
 - Choose custom format with `/custom <url>`
+- Cookie support for authentication
 - Optional logging to a Telegram chat/channel
 - Domain allowlist for safer URL handling
 - Docker support with `docker-compose`
@@ -46,11 +48,12 @@ A Telegram bot that downloads media on Telegram using [yt-dlp](https://github.co
 
 ## Commands
 
-- `/start` or `/help` — Show usage help
-- `/download <url>` — Download video
-- `/audio <url>` — Download and extract MP3
-- `/custom <url>` — Show available formats and pick one
-- `/id` — Return current chat ID (useful for `logs` config)
+- `/start` or `/help` - Show usage help
+- `/download <url>` - Download video
+- `/audio <url>` - Download and extract MP3
+- `/custom <url>` - Show available formats and pick one
+- `/cookies` - Attach a cookies txt file to be used when downloading videos
+- `/id` - Return current chat ID (useful for `logs` config)
 
 In private chat, you can also just send a URL directly.
 
@@ -137,6 +140,13 @@ allowed_domains: list[str] = [
     "bsky.app",
     "www.bsky.app",
 ]
+
+# secret key used to encrypt/decrypt stores cookies
+secret_key: str = "your-secret-key"
+
+# this is used to solve youtube challenges, you can set it to None if you don't
+# need it or change the runtime like {"bun": {"path": "bun"}}
+js_runtime: dict[str, dict[str, str] | None] | None = {"node": {"path": "node"}}
 ```
 
 ---
@@ -242,6 +252,23 @@ Bots are limited by Telegram upload constraints.
 Reference: https://core.telegram.org/bots/faq#how-do-i-upload-a-large-file
 
 Set `max_filesize` according to what you want the bot to attempt and what Telegram will accept in your use case.
+
+---
+
+## Cookies Support
+
+Some websites may require authentication to download content, this can be set by passing a `cookies.txt` file to the `/cookie` command.
+YouTube requires a js challenge to be solved to download videos using cookies, this needs `js_runtime` to be set in `config.py`, for example if you use **Node** you can set:
+```py
+js_runtime: dict[str, dict[str, str] | None] | None = {"node": {"path": "node"}}
+
+# Or if you use Bun
+js_runtime: dict[str, dict[str, str] | None] | None = {"bun": {"path": "bun"}}
+```
+Cookies are stored in `db.db` (using Sqlite3) and encrypted with a `secret_key` that can be set in the config file.
+
+### Where can I find cookies.txt
+You need to export it from your browser using an extension like [this one](https://github.com/kairi003/Get-cookies.txt-LOCALLY?tab=readme-ov-file#from-webstore)
 
 ---
 

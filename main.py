@@ -1,6 +1,9 @@
+import base64
 import datetime
+import hashlib
 import os
 import re
+import sqlite3
 import time
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -8,6 +11,7 @@ from urllib.parse import urlparse
 import requests
 import telebot
 import yt_dlp
+from cryptography.fernet import Fernet
 from telebot import types
 from telebot.util import quick_markup
 from yt_dlp.utils import DownloadError, ExtractorError
@@ -16,9 +20,34 @@ import config
 
 os.makedirs(config.output_folder, exist_ok=True)
 
+key = hashlib.sha256(config.secret_key.encode()).digest()
+cipher = Fernet(base64.urlsafe_b64encode(key))
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+db_path = os.path.join(script_dir, "db.db")
+db_conn = sqlite3.connect(db_path, check_same_thread=False)
+db_cursor = db_conn.cursor()
+db_cursor.execute("""
+    CREATE TABLE IF NOT EXISTS user_cookies (
+        user_id INTEGER PRIMARY KEY,
+        cookie_data TEXT NOT NULL
+    )
+""")
+db_conn.commit()
+
 ses = requests.Session()
 bot = telebot.TeleBot(config.token)
 last_edited = {}
+
+
+def encrypt_cookie(cookie_data: str) -> str:
+    """Encrypt cookie data using the secret key."""
+    return cipher.encrypt(cookie_data.encode()).decode()
+
+
+def decrypt_cookie(encrypted_data: str) -> str:
+    """Decrypt cookie data using the secret key."""
+    return cipher.decrypt(encrypted_data.encode()).decode()
 
 
 def youtube_url_validation(url):
@@ -139,16 +168,26 @@ def _cleanup(video_title: int) -> None:
             os.remove(os.path.join(config.output_folder, file))
 
 
-def download_video(message, content, audio=False, format_id="mp4") -> None:
+def check_url(content: str, message) -> dict:
     match = re.search(r"https?://\S+", content)
     url = match.group(0) if match else content
 
     if not urlparse(url).scheme:
         bot.reply_to(message, "Invalid URL")
-        return
+        return {"success": False}
 
     if not _validate_url(message, url):
+        return {"success": False}
+
+    return {"success": True, "url": url}
+
+
+def download_video(message, content, audio=False, format_id="mp4") -> None:
+    check = check_url(content, message)
+    if not check["success"]:
         return
+
+    url = check["url"]
 
     msg = bot.reply_to(
         message,
@@ -165,9 +204,29 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3"}]
         if audio
         else [],
+        "js_runtimes": {"bun": {"path": "bun"}},
+        "remote_components": {"ejs:github"},
     }
 
+    if config.js_runtime:
+        ydl_opts["js_runtimes"] = config.js_runtime
+        ydl_opts["remote_components"] = {"ejs:github"}
+
+    cookie_file = None
     try:
+        user_id = message.from_user.id
+        db_cursor.execute(
+            "SELECT cookie_data FROM user_cookies WHERE user_id = ?", (user_id,)
+        )
+        result = db_cursor.fetchone()
+
+        if result:
+            decrypted_data = decrypt_cookie(result[0])
+            cookie_file = f"{config.output_folder}/cookies_{user_id}.txt"
+            with open(cookie_file, "w") as f:
+                f.write(decrypted_data)
+            ydl_opts["cookiefile"] = cookie_file
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
 
@@ -203,6 +262,8 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
         )
 
     finally:
+        if cookie_file and os.path.exists(cookie_file):
+            os.remove(cookie_file)
         _cleanup(video_title)
 
 
@@ -255,15 +316,18 @@ def download_audio_command(message):
 
 @bot.message_handler(commands=["custom"])
 def custom(message):
-    text = get_text(message)
-    if not text:
-        bot.reply_to(message, "Invalid usage, use `/custom url`", parse_mode="MARKDOWN")
+    text = message.text if message.text else message.caption
+
+    check = check_url(text, message)
+    if not check["success"]:
         return
+
+    url = check["url"]
 
     msg = bot.reply_to(message, "Getting formats...")
 
     with yt_dlp.YoutubeDL() as ydl:
-        info = ydl.extract_info(text, download=False)
+        info = ydl.extract_info(url, download=False)
 
     formats = info.get("formats") or []
 
@@ -279,21 +343,127 @@ def custom(message):
     bot.reply_to(message, "Choose a format", reply_markup=markup)
 
 
+def filter_cookies_by_domain(cookie_data: str) -> str:
+    lines = cookie_data.split("\n")
+    filtered_lines = []
+
+    for line in lines:
+        if line.startswith("#") or not line.strip():
+            filtered_lines.append(line)
+            continue
+
+        parts = line.split("\t")
+        if len(parts) < 7:
+            continue
+
+        domain = parts[0].lstrip(".")
+
+        is_allowed = False
+        for allowed_domain in config.allowed_domains:
+            if domain == allowed_domain or domain.endswith("." + allowed_domain):
+                is_allowed = True
+                break
+
+        if is_allowed:
+            filtered_lines.append(line)
+
+    return "\n".join(filtered_lines)
+
+
 @bot.message_handler(commands=["id"])
 def get_chat_id(message):
     bot.reply_to(message, message.chat.id)
 
 
+def is_cookie_command(message):
+    text = message.text or message.caption or ""
+    return text.startswith("/cookie") or text.startswith("/cookies")
+
+
+@bot.message_handler(func=is_cookie_command, content_types=["document", "text"])
+def handle_cookie(message):
+    user_id = message.from_user.id
+
+    if not message.document:
+        db_cursor.execute(
+            "SELECT cookie_data FROM user_cookies WHERE user_id = ?", (user_id,)
+        )
+        result = db_cursor.fetchone()
+
+        if result:
+            cookie_file = f"{config.output_folder}/cookies_{user_id}_temp.txt"
+            try:
+                decrypted_data = decrypt_cookie(result[0])
+                with open(cookie_file, "w") as f:
+                    f.write(decrypted_data)
+
+                markup = types.InlineKeyboardMarkup()
+                delete_btn = types.InlineKeyboardButton(
+                    "🗑 Delete", callback_data="delete_cookies"
+                )
+                markup.add(delete_btn)
+
+                with open(cookie_file, "rb") as f:
+                    bot.send_document(
+                        message.chat.id,
+                        f,
+                        reply_to_message_id=message.message_id,
+                        visible_file_name="cookies.txt",
+                        reply_markup=markup,
+                    )
+            finally:
+                if os.path.exists(cookie_file):
+                    os.remove(cookie_file)
+        else:
+            bot.reply_to(
+                message,
+                "No cookies stored. Send a file with this command to store cookies.",
+            )
+        return
+
+    file_info = bot.get_file(message.document.file_id)
+    if not file_info.file_path:
+        bot.reply_to(message, "Failed to get file information.")
+        return
+
+    downloaded_file = bot.download_file(file_info.file_path)
+    cookie_data = downloaded_file.decode("utf-8")
+
+    filtered_cookie_data = filter_cookies_by_domain(cookie_data)
+
+    encrypted_data = encrypt_cookie(filtered_cookie_data)
+
+    db_cursor.execute(
+        "INSERT OR REPLACE INTO user_cookies (user_id, cookie_data) VALUES (?, ?)",
+        (user_id, encrypted_data),
+    )
+    db_conn.commit()
+    bot.reply_to(message, "Cookies saved successfully!")
+
+
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
-    if call.from_user.id == call.message.reply_to_message.from_user.id:
-        url = get_text(call.message.reply_to_message)
-        bot.delete_message(call.message.chat.id, call.message.message_id)
-        download_video(
-            call.message.reply_to_message, url, format_id=f"{call.data}+bestaudio"
+    if call.data == "delete_cookies":
+        user_id = call.from_user.id
+        db_cursor.execute("DELETE FROM user_cookies WHERE user_id = ?", (user_id,))
+        db_conn.commit()
+
+        bot.edit_message_caption(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            caption="Cookies deleted successfully!",
+            reply_markup=None,
         )
-    else:
-        bot.answer_callback_query(call.id, "You didn't send the request")
+        bot.answer_callback_query(call.id, "Cookies deleted!")
+    elif call.message.reply_to_message:
+        if call.from_user.id == call.message.reply_to_message.from_user.id:
+            url = get_text(call.message.reply_to_message)
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+            download_video(
+                call.message.reply_to_message, url, format_id=f"{call.data}+bestaudio"
+            )
+        else:
+            bot.answer_callback_query(call.id, "You didn't send the request")
 
 
 @bot.message_handler(
