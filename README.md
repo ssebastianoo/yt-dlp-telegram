@@ -12,6 +12,14 @@ A Telegram bot that downloads media on Telegram using [yt-dlp](https://github.co
 
 **Need more help?** Join the [support group](https://t.me/satorubotsupport) or the [status](https://t.me/satorustatus) channel
 
+<a href="https://www.star-history.com/?repos=ssebastianoo%2Fyt-dlp-telegram&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ssebastianoo/yt-dlp-telegram&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ssebastianoo/yt-dlp-telegram&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=ssebastianoo/yt-dlp-telegram&type=date&legend=top-left" />
+ </picture>
+</a>
+
 ## Table of Contents
 
 - [Features](#features)
