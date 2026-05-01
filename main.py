@@ -18,6 +18,13 @@ from yt_dlp.utils import DownloadCancelled, DownloadError, ExtractorError
 
 import config
 
+whitelist = getattr(config, "whitelist", None)
+blacklist = getattr(config, "blacklist", None)
+logs = getattr(config, "logs", None)
+js_runtime = getattr(config, "js_runtime", None)
+max_filesize = getattr(config, "max_filesize", 50000000)
+allowed_domains = getattr(config, "allowed_domains", [])
+
 os.makedirs(config.output_folder, exist_ok=True)
 
 key = hashlib.sha256(config.secret_key.encode()).digest()
@@ -77,7 +84,7 @@ def is_allowed_domain(url):
         if ":" in domain:
             domain = domain.split(":")[0]
 
-        return domain in config.allowed_domains
+        return domain in allowed_domains
     except (ValueError, AttributeError):
         return False
 
@@ -127,7 +134,7 @@ def _make_progress_hook(message, msg) -> Callable:
                 return
 
             downloaded_bytes = d.get("downloaded_bytes", 0)
-            if downloaded_bytes > config.max_filesize:
+            if downloaded_bytes > max_filesize:
                 raise DownloadCancelled("File too large")
 
             perc = round(d["downloaded_bytes"] * 100 / d["total_bytes"])
@@ -204,10 +211,10 @@ def check_url(content: str, message) -> dict:
 def download_video(message, content, audio=False, format_id="mp4") -> None:
 
     forbidden = False
-    if config.whitelist is not None and message.from_user.id not in config.whitelist:
+    if whitelist is not None and message.from_user.id not in whitelist:
         forbidden = True
 
-    if config.blacklist is not None and message.from_user.id in config.blacklist:
+    if blacklist is not None and message.from_user.id in blacklist:
         forbidden = True
 
     if forbidden:
@@ -231,14 +238,14 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
         "format": format_id,
         "outtmpl": f"{config.output_folder}/{video_title}.%(ext)s",
         "progress_hooks": [_make_progress_hook(message, msg)],
-        "max_filesize": config.max_filesize,
+        "max_filesize": max_filesize,
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3"}]
         if audio
         else [],
     }
 
-    if config.js_runtime is not None:
-        ydl_opts["js_runtimes"] = config.js_runtime
+    if js_runtime is not None:
+        ydl_opts["js_runtimes"] = js_runtime
         ydl_opts["remote_components"] = {"ejs:github"}
 
     cookie_file = None
@@ -288,7 +295,7 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
     except Exception:
         bot.edit_message_text(
             f"Couldn't send file — make sure it doesn't exceed "
-            f"*{round(config.max_filesize / 1_000_000)}MB* and is supported by Telegram.",
+            f"*{round(max_filesize / 1_000_000)}MB* and is supported by Telegram.",
             message.chat.id,
             msg.message_id,
             parse_mode="MARKDOWN",
@@ -301,14 +308,14 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
 
 
 def log(message, text: str, media: str):
-    if config.logs:
+    if logs:
         if message.chat.type == "private":
             chat_info = "Private chat"
         else:
             chat_info = f"Group: *{message.chat.title}* (`{message.chat.id}`)"
 
         bot.send_message(
-            config.logs,
+            logs,
             f"Download request ({media}) from @{message.from_user.username} ({message.from_user.id})\n\n{chat_info}\n\n{text}",
         )
 
@@ -392,7 +399,7 @@ def filter_cookies_by_domain(cookie_data: str) -> str:
         domain = parts[0].lstrip(".")
 
         is_allowed = False
-        for allowed_domain in config.allowed_domains:
+        for allowed_domain in allowed_domains:
             if domain == allowed_domain or domain.endswith("." + allowed_domain):
                 is_allowed = True
                 break
