@@ -14,7 +14,7 @@ import yt_dlp
 from cryptography.fernet import Fernet
 from telebot import types
 from telebot.util import quick_markup
-from yt_dlp.utils import DownloadError, ExtractorError
+from yt_dlp.utils import DownloadCancelled, DownloadError, ExtractorError
 
 import config
 
@@ -126,6 +126,10 @@ def _make_progress_hook(message, msg) -> Callable:
             if last and (datetime.datetime.now() - last).total_seconds() < 5:
                 return
 
+            downloaded_bytes = d.get("downloaded_bytes", 0)
+            if downloaded_bytes > config.max_filesize:
+                raise DownloadCancelled("File too large")
+
             perc = round(d["downloaded_bytes"] * 100 / d["total_bytes"])
             bot.edit_message_text(
                 chat_id=message.chat.id,
@@ -137,15 +141,30 @@ def _make_progress_hook(message, msg) -> Callable:
                 parse_mode="HTML",
             )
             last_edited[f"{message.chat.id}-{msg.message_id}"] = datetime.datetime.now()
+        except DownloadCancelled:
+            raise
         except Exception as e:
             print(e)
 
     return progress
 
 
+class MissingInfoError(Exception):
+    pass
+
+
 def _send_media(message, info: Any, audio: bool) -> None:
     """Send the downloaded file back to the user via Telegram."""
-    downloads = info.get("requested_downloads") or []
+
+    downloads = info.get("requested_downloads") or None
+
+    if not downloads:
+        if info.get("entries") is not None and len(info.get("entries")) > 0:
+            downloads = info.get("entries")[0].get("requested_downloads") or None
+
+    if not downloads or len(downloads) == 0:
+        raise MissingInfoError("No requested downloads found")
+
     filepath = downloads[0]["filepath"]
 
     with open(filepath, "rb") as f:
@@ -183,6 +202,18 @@ def check_url(content: str, message) -> dict:
 
 
 def download_video(message, content, audio=False, format_id="mp4") -> None:
+
+    forbidden = False
+    if config.whitelist is not None and message.from_user.id not in config.whitelist:
+        forbidden = True
+
+    if config.blacklist is not None and message.from_user.id in config.blacklist:
+        forbidden = True
+
+    if forbidden:
+        bot.reply_to(message, "You are not allowed to use this bot")
+        return
+
     check = check_url(content, message)
     if not check["success"]:
         return
@@ -204,11 +235,9 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3"}]
         if audio
         else [],
-        "js_runtimes": {"bun": {"path": "bun"}},
-        "remote_components": {"ejs:github"},
     }
 
-    if config.js_runtime:
+    if config.js_runtime is not None:
         ydl_opts["js_runtimes"] = config.js_runtime
         ydl_opts["remote_components"] = {"ejs:github"}
 
@@ -238,7 +267,12 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
 
             _send_media(message, info, audio)
             bot.delete_message(message.chat.id, msg.message_id)
-
+    except MissingInfoError:
+        bot.edit_message_text(
+            "Couldn't find a way to download this video, you can report it here: @SatoruSupport",
+            message.chat.id,
+            msg.message_id,
+        )
     except (DownloadError, ExtractorError) as e:
         err = str(e).lower()
         text: str
@@ -251,7 +285,6 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
             text = "There was an error downloading the video, please try again later."
 
         bot.edit_message_text(text, message.chat.id, msg.message_id)
-
     except Exception:
         bot.edit_message_text(
             f"Couldn't send file — make sure it doesn't exceed "

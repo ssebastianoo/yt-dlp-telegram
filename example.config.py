@@ -1,6 +1,12 @@
 # The telegram bot token
 token: str = "123456789:ABcdefGhiJKlmnO"
 
+# A list of user ids that are allowed to use the bot, if None everyone is allowed
+whitelist: list[int] | None = None  # Example: [123456789, 987654321]
+
+# A list of user ids that are not allowed to use the bot, if None everyone is allowed
+blacklist: list[int] | None = None
+
 # The logs channel id, if none set to None
 logs: int | None = None
 
