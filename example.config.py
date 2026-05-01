@@ -43,3 +43,6 @@ secret_key: str = "your-secret-key"
 # this is used to solve youtube challenges, you can set it to None if you don't
 # need it or change the runtime like {"node": {"path": "node"}}
 js_runtime: dict[str, dict[str, str] | None] | None = {"bun": {"path": "bun"}}
+
+# auto forward videos to this channel id when using the /forward command
+forward_to: int | None = None

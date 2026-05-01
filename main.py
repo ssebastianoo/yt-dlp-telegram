@@ -24,6 +24,7 @@ logs = getattr(config, "logs", None)
 js_runtime = getattr(config, "js_runtime", None)
 max_filesize = getattr(config, "max_filesize", 50000000)
 allowed_domains = getattr(config, "allowed_domains", [])
+forward_to: int | None = getattr(config, "forward_to", None)
 
 os.makedirs(config.output_folder, exist_ok=True)
 
@@ -160,7 +161,7 @@ class MissingInfoError(Exception):
     pass
 
 
-def _send_media(message, info: Any, audio: bool) -> None:
+def _send_media(message, info: Any, audio: bool, forward: bool = False) -> None:
     """Send the downloaded file back to the user via Telegram."""
 
     downloads = info.get("requested_downloads") or None
@@ -178,10 +179,15 @@ def _send_media(message, info: Any, audio: bool) -> None:
         if audio:
             bot.send_audio(message.chat.id, f, reply_to_message_id=message.message_id)
         else:
+            channel_id = message.chat.id
+            if forward:
+                assert forward_to is not None, (
+                    "forward_to is required when forwarding videos"
+                )
+                channel_id = forward_to
             bot.send_video(
-                message.chat.id,
+                channel_id,
                 f,
-                reply_to_message_id=message.message_id,
                 width=downloads[0]["width"],
                 height=downloads[0]["height"],
             )
@@ -208,7 +214,9 @@ def check_url(content: str, message) -> dict:
     return {"success": True, "url": url}
 
 
-def download_video(message, content, audio=False, format_id="mp4") -> None:
+def download_video(
+    message, content, audio=False, format_id="mp4", forward=False
+) -> None:
 
     forbidden = False
     if whitelist is not None and message.from_user.id not in whitelist:
@@ -272,8 +280,16 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
                 text="Sending file to Telegram...",
             )
 
-            _send_media(message, info, audio)
-            bot.delete_message(message.chat.id, msg.message_id)
+            _send_media(message, info, audio, forward)
+
+            if forward_to:
+                bot.edit_message_text(
+                    chat_id=message.chat.id,
+                    message_id=msg.message_id,
+                    text="File forwarded",
+                )
+            else:
+                bot.delete_message(message.chat.id, msg.message_id)
     except MissingInfoError:
         bot.edit_message_text(
             "Couldn't find a way to download this video, you can report it here: @SatoruSupport",
@@ -292,7 +308,8 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
             text = "There was an error downloading the video, please try again later."
 
         bot.edit_message_text(text, message.chat.id, msg.message_id)
-    except Exception:
+    except Exception as e:
+        print(e)
         bot.edit_message_text(
             f"Couldn't send file — make sure it doesn't exceed "
             f"*{round(max_filesize / 1_000_000)}MB* and is supported by Telegram.",
@@ -341,6 +358,23 @@ def download_command(message):
 
     log(message, text, "video")
     download_video(message, text)
+
+
+@bot.message_handler(commands=["forward"])
+def forward_command(message):
+    if not forward_to:
+        bot.reply_to(message, "forward_to is not set")
+        return
+
+    text = get_text(message)
+    if not text:
+        bot.reply_to(
+            message, "Invalid usage, use `/forward url`", parse_mode="MARKDOWN"
+        )
+        return
+
+    log(message, text, "video")
+    download_video(message, text, forward=True)
 
 
 @bot.message_handler(commands=["audio"])
