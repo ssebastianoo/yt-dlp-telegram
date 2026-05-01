@@ -25,6 +25,7 @@ js_runtime = getattr(config, "js_runtime", None)
 max_filesize = getattr(config, "max_filesize", 50000000)
 allowed_domains = getattr(config, "allowed_domains", [])
 forward_to: int | None = getattr(config, "forward_to", None)
+forward_permissions: list[int] = getattr(config, "forward_permissions", [])
 
 os.makedirs(config.output_folder, exist_ok=True)
 
@@ -362,6 +363,10 @@ def download_command(message):
 
 @bot.message_handler(commands=["forward"])
 def forward_command(message):
+    if message.from_user.id not in forward_permissions:
+        bot.reply_to(message, "You are not allowed to forward videos")
+        return
+
     if not forward_to:
         bot.reply_to(message, "forward_to is not set")
         return

@@ -46,3 +46,6 @@ js_runtime: dict[str, dict[str, str] | None] | None = {"bun": {"path": "bun"}}
 
 # auto forward videos to this channel id when using the /forward command
 forward_to: int | None = None
+
+# the ids of the users who will be able to forward videos
+forward_permissions: list[int] = []
