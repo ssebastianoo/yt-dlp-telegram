@@ -13,6 +13,12 @@ logs: int | None = None
 # The maximum file size in bytes
 max_filesize: int = 50000000
 
+# Maximum number of concurrent downloads allowed per user
+max_user_concurrent_downloads: int = 1
+
+# Maximum number of concurrent downloads allowed globally (shared across all users)
+max_global_concurrent_downloads: int = 2
+
 # How many times to retry a download on transient errors (rate limiting, network timeouts)
 max_retries: int = 3
 

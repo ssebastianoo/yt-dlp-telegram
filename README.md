@@ -116,6 +116,11 @@ If everything is correct, you should see output similar to:
 
 Create a `config.py` file in the project root. `config.py` example [here](example.config.py)
 
+### Concurrency limits
+
+- `max_user_concurrent_downloads` — Maximum number of concurrent downloads per user. Extra requests are rejected.
+- `max_global_concurrent_downloads` — Maximum number of concurrent downloads across all users. Extra requests are queued (FIFO).
+
 ---
 
 ## Docker Tutorial

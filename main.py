@@ -4,7 +4,9 @@ import hashlib
 import os
 import re
 import sqlite3
+import threading
 import time
+from queue import Queue
 from typing import Any, Callable
 from urllib.parse import urlparse
 
@@ -23,11 +25,18 @@ blacklist = getattr(config, "blacklist", None)
 logs = getattr(config, "logs", None)
 js_runtime = getattr(config, "js_runtime", None)
 max_filesize = getattr(config, "max_filesize", 50000000)
+max_user_concurrent_downloads = getattr(config, "max_user_concurrent_downloads", 1)
+max_global_concurrent_downloads = getattr(config, "max_global_concurrent_downloads", 2)
 max_retries = getattr(config, "max_retries", 3)
 retry_delay = getattr(config, "retry_delay", 5)
 allowed_domains = getattr(config, "allowed_domains", [])
 forward_to: int | None = getattr(config, "forward_to", None)
 forward_permissions: list[int] = getattr(config, "forward_permissions", [])
+
+if max_user_concurrent_downloads < 1:
+    max_user_concurrent_downloads = 1
+if max_global_concurrent_downloads < 1:
+    max_global_concurrent_downloads = 1
 
 os.makedirs(config.output_folder, exist_ok=True)
 
@@ -49,6 +58,11 @@ db_conn.commit()
 ses = requests.Session()
 bot = telebot.TeleBot(config.token)
 last_edited = {}
+download_queue: Queue[dict] = Queue()
+queue_lock = threading.Lock()
+active_global_downloads = 0
+active_user_downloads: dict[int, int] = {}
+queued_user_downloads: dict[int, int] = {}
 
 
 def encrypt_cookie(cookie_data: str) -> str:
@@ -255,10 +269,9 @@ def check_url(content: str, message) -> dict:
     return {"success": True, "url": url}
 
 
-def download_video(
-    message, content, audio=False, format_id="mp4", forward=False
+def enqueue_download(
+    message, content, audio: bool = False, format_id: str = "mp4", forward: bool = False
 ) -> None:
-
     forbidden = False
     if whitelist is not None and message.from_user.id not in whitelist:
         forbidden = True
@@ -270,12 +283,60 @@ def download_video(
         bot.reply_to(message, "You are not allowed to use this bot")
         return
 
+    if not content:
+        bot.reply_to(message, "Invalid URL")
+        return
+
     check = check_url(content, message)
     if not check["success"]:
         return
 
     url = check["url"]
+    user_id = message.from_user.id
 
+    with queue_lock:
+        pending = active_user_downloads.get(user_id, 0) + queued_user_downloads.get(
+            user_id, 0
+        )
+        if pending >= max_user_concurrent_downloads:
+            bot.reply_to(
+                message,
+                f"Too many concurrent downloads. Limit is {max_user_concurrent_downloads}.",
+            )
+            return
+
+        queued_user_downloads[user_id] = queued_user_downloads.get(user_id, 0) + 1
+        should_notify_queue = (
+            active_global_downloads >= max_global_concurrent_downloads
+            or download_queue.qsize() > 0
+        )
+
+        download_queue.put(
+            {
+                "message": message,
+                "url": url,
+                "audio": audio,
+                "format_id": format_id,
+                "forward": forward,
+                "user_id": user_id,
+            }
+        )
+        position = download_queue.qsize()
+
+    if should_notify_queue:
+        bot.reply_to(
+            message,
+            f"All download slots are busy. Your request has been queued (position {position}).",
+        )
+
+
+def _perform_download(
+    message,
+    url: str,
+    audio: bool = False,
+    format_id: str = "mp4",
+    forward: bool = False,
+) -> None:
     msg = bot.reply_to(
         message,
         "Downloading...\n\n<i>Want to stay updated? @SatoruStatus</i>",
@@ -381,6 +442,43 @@ def download_video(
         _cleanup(video_title)
 
 
+def _download_worker() -> None:
+    global active_global_downloads
+
+    while True:
+        task = download_queue.get()
+        user_id = task["user_id"]
+
+        with queue_lock:
+            active_global_downloads += 1
+            active_user_downloads[user_id] = active_user_downloads.get(user_id, 0) + 1
+            queued_user_downloads[user_id] = max(
+                0, queued_user_downloads.get(user_id, 0) - 1
+            )
+            if queued_user_downloads[user_id] == 0:
+                del queued_user_downloads[user_id]
+
+        try:
+            _perform_download(
+                task["message"],
+                task["url"],
+                task["audio"],
+                task["format_id"],
+                task["forward"],
+            )
+        except Exception as e:
+            print(f"Download worker error for user {user_id}: {e}")
+        finally:
+            with queue_lock:
+                active_global_downloads -= 1
+                active_user_downloads[user_id] = max(
+                    0, active_user_downloads.get(user_id, 0) - 1
+                )
+                if active_user_downloads[user_id] == 0:
+                    del active_user_downloads[user_id]
+            download_queue.task_done()
+
+
 def log(message, text: str, media: str):
     if logs:
         if message.chat.type == "private":
@@ -414,7 +512,7 @@ def download_command(message):
         return
 
     log(message, text, "video")
-    download_video(message, text)
+    enqueue_download(message, text)
 
 
 @bot.message_handler(commands=["audio"])
@@ -425,7 +523,7 @@ def download_audio_command(message):
         return
 
     log(message, text, "audio")
-    download_video(message, text, True)
+    enqueue_download(message, text, True)
 
 
 @bot.message_handler(commands=["forward"])
@@ -446,7 +544,7 @@ def forward_command(message):
         return
 
     log(message, text, "video")
-    download_video(message, text, forward=True)
+    enqueue_download(message, text, forward=True)
 
 
 @bot.message_handler(commands=["custom"])
@@ -594,7 +692,7 @@ def callback(call):
         if call.from_user.id == call.message.reply_to_message.from_user.id:
             url = get_text(call.message.reply_to_message)
             bot.delete_message(call.message.chat.id, call.message.message_id)
-            download_video(
+            enqueue_download(
                 call.message.reply_to_message, url, format_id=f"{call.data}+bestaudio"
             )
         else:
@@ -617,13 +715,26 @@ def handle_private_messages(message: types.Message):
     )
 
     if message.chat.type == "private":
+        assert message.from_user is not None, "Error: message.from_user is None"
+
         should_forward = (
             forward_to is not None and message.from_user.id in forward_permissions
         )
         log(message, text or "<no text>", "video")
-        download_video(message, text, forward=should_forward)
+        enqueue_download(message, text, forward=should_forward)
         return
 
 
+def _start_download_workers() -> None:
+    for i in range(max_global_concurrent_downloads):
+        worker = threading.Thread(
+            target=_download_worker,
+            name=f"download-worker-{i + 1}",
+            daemon=True,
+        )
+        worker.start()
+
+
+_start_download_workers()
 print(f"ready as @{bot.user.username}")
 bot.infinity_polling()
