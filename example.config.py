@@ -13,6 +13,12 @@ logs: int | None = None
 # The maximum file size in bytes
 max_filesize: int = 50000000
 
+# How many times to retry a download on transient errors (rate limiting, network timeouts)
+max_retries: int = 3
+
+# Seconds to wait between retry attempts
+retry_delay: int = 5
+
 # The output folder for downloaded files, it gets cleared after each download
 output_folder: str = "/tmp/satoru"
 

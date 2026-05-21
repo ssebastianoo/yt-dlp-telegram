@@ -23,6 +23,8 @@ blacklist = getattr(config, "blacklist", None)
 logs = getattr(config, "logs", None)
 js_runtime = getattr(config, "js_runtime", None)
 max_filesize = getattr(config, "max_filesize", 50000000)
+max_retries = getattr(config, "max_retries", 3)
+retry_delay = getattr(config, "retry_delay", 5)
 allowed_domains = getattr(config, "allowed_domains", [])
 
 os.makedirs(config.output_folder, exist_ok=True)
@@ -194,6 +196,44 @@ def _cleanup(video_title: int) -> None:
             os.remove(os.path.join(config.output_folder, file))
 
 
+def _is_transient_error(e: Exception) -> bool:
+    """Check if a yt-dlp error is transient (rate limiting, network issue) and worth retrying."""
+    if isinstance(e, DownloadCancelled):
+        return False
+
+    err = str(e).lower()
+
+    if any(
+        phrase in err
+        for phrase in ["rate-limit", "rate limit", "too many requests", "429"]
+    ):
+        return True
+
+    if "[youtube]" in err and "sign in" in err:
+        return True
+
+    if "login required" in err:
+        return True
+
+    if "http error 5" in err:
+        return True
+
+    if any(
+        phrase in err
+        for phrase in [
+            "timeout",
+            "connection reset",
+            "connection refused",
+            "connection closed",
+            "eof",
+            "name resolution",
+        ]
+    ):
+        return True
+
+    return False
+
+
 def check_url(content: str, message) -> dict:
     match = re.search(r"https?://\S+", content)
     url = match.group(0) if match else content
@@ -263,17 +303,34 @@ def download_video(message, content, audio=False, format_id="mp4") -> None:
                 f.write(decrypted_data)
             ydl_opts["cookiefile"] = cookie_file
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+        info = None
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                last_error = None
+                break
+            except (DownloadError, ExtractorError) as e:
+                last_error = e
+                if _is_transient_error(e) and attempt < max_retries:
+                    _cleanup(video_title)
+                    print(f"Retry {attempt + 1}/{max_retries} for {url}: {e}")
+                    time.sleep(retry_delay)
+                    continue
+                raise
 
-            bot.edit_message_text(
-                chat_id=message.chat.id,
-                message_id=msg.message_id,
-                text="Sending file to Telegram...",
-            )
+        if last_error is not None:
+            raise last_error
 
-            _send_media(message, info, audio)
-            bot.delete_message(message.chat.id, msg.message_id)
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=msg.message_id,
+            text="Sending file to Telegram...",
+        )
+
+        _send_media(message, info, audio)
+        bot.delete_message(message.chat.id, msg.message_id)
     except MissingInfoError:
         bot.edit_message_text(
             "Couldn't find a way to download this video, you can report it here: @SatoruSupport",
