@@ -63,6 +63,8 @@ queue_lock = threading.Lock()
 active_global_downloads = 0
 active_user_downloads: dict[int, int] = {}
 queued_user_downloads: dict[int, int] = {}
+_format_registry: dict[str, str] = {}
+_format_counter = 0
 
 
 def encrypt_cookie(cookie_data: str) -> str:
@@ -373,16 +375,12 @@ def _perform_download(
                 f.write(decrypted_data)
             ydl_opts["cookiefile"] = cookie_file
 
-        info = None
-        last_error = None
         for attempt in range(max_retries + 1):
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=True)
-                last_error = None
                 break
-            except (DownloadError, ExtractorError) as e:
-                last_error = e
+            except (DownloadError, ExtractorError, DownloadCancelled) as e:
                 if _is_transient_error(e) and attempt < max_retries:
                     _cleanup(video_title)
                     print(f"Retry {attempt + 1}/{max_retries} for {url}: {e}")
@@ -390,16 +388,24 @@ def _perform_download(
                     continue
                 raise
 
-        if last_error is not None:
-            raise last_error
-
         bot.edit_message_text(
             chat_id=message.chat.id,
             message_id=msg.message_id,
             text="Sending file to Telegram...",
         )
 
-        _send_media(message, info, audio, forward)
+        for send_attempt in range(max_retries + 1):
+            try:
+                _send_media(message, info, audio, forward)
+                break
+            except Exception as e:
+                if send_attempt < max_retries:
+                    print(
+                        f"Send retry {send_attempt + 1}/{max_retries} for {url}: {e}"
+                    )
+                    time.sleep(retry_delay)
+                    continue
+                raise
 
         if forward:
             bot.edit_message_text(
@@ -427,13 +433,20 @@ def _perform_download(
             text = "There was an error downloading the video, please try again later."
 
         bot.edit_message_text(text, message.chat.id, msg.message_id)
-    except Exception:
+    except DownloadCancelled:
         bot.edit_message_text(
-            f"Couldn't send file — make sure it doesn't exceed "
-            f"*{round(max_filesize / 1_000_000)}MB* and is supported by Telegram.",
+            f"Download cancelled — file exceeds "
+            f"*{round(max_filesize / 1_000_000)}MB* limit.",
             message.chat.id,
             msg.message_id,
             parse_mode="MARKDOWN",
+        )
+    except Exception as e:
+        print(f"Unexpected error for {url}: {e}")
+        bot.edit_message_text(
+            "An unexpected error occurred. Please try again later.",
+            message.chat.id,
+            msg.message_id,
         )
 
     finally:
@@ -466,8 +479,6 @@ def _download_worker() -> None:
                 task["format_id"],
                 task["forward"],
             )
-        except Exception as e:
-            print(f"Download worker error for user {user_id}: {e}")
         finally:
             with queue_lock:
                 active_global_downloads -= 1
@@ -549,6 +560,15 @@ def forward_command(message):
 
 @bot.message_handler(commands=["custom"])
 def custom(message):
+    forbidden = False
+    if whitelist is not None and message.from_user.id not in whitelist:
+        forbidden = True
+    if blacklist is not None and message.from_user.id in blacklist:
+        forbidden = True
+    if forbidden:
+        bot.reply_to(message, "You are not allowed to use this bot")
+        return
+
     text = message.text if message.text else message.caption
 
     check = check_url(text, message)
@@ -559,16 +579,34 @@ def custom(message):
 
     msg = bot.reply_to(message, "Getting formats...")
 
-    with yt_dlp.YoutubeDL() as ydl:
-        info = ydl.extract_info(url, download=False)
+    try:
+        with yt_dlp.YoutubeDL() as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception:
+        bot.edit_message_text(
+            "Failed to fetch formats. Please try again later.",
+            message.chat.id,
+            msg.message_id,
+        )
+        return
 
     formats = info.get("formats") or []
 
-    data = {
-        f"{x['resolution']}.{x['ext']}": {"callback_data": f"{x['format_id']}"}
-        for x in formats
-        if x["video_ext"] != "none"
-    }
+    global _format_registry, _format_counter
+    data = {}
+    for x in formats:
+        if x.get("video_ext") == "none":
+            continue
+        resolution = x.get("resolution") or "unknown"
+        ext = x.get("ext") or "unknown"
+        label = f"{resolution}.{ext}"
+        # Deduplicate by appending a counter when needed
+        if label in data:
+            label = f"{resolution}.{ext} ({x.get('format_id')})"
+        fid = str(_format_counter)
+        _format_counter += 1
+        _format_registry[fid] = x["format_id"]
+        data[label] = {"callback_data": fid}
 
     markup = quick_markup(data, row_width=2)
 
@@ -691,9 +729,13 @@ def callback(call):
     elif call.message.reply_to_message:
         if call.from_user.id == call.message.reply_to_message.from_user.id:
             url = get_text(call.message.reply_to_message)
+            format_id = _format_registry.get(call.data)
+            if not format_id:
+                bot.answer_callback_query(call.id, "Format no longer available")
+                return
             bot.delete_message(call.message.chat.id, call.message.message_id)
             enqueue_download(
-                call.message.reply_to_message, url, format_id=f"{call.data}+bestaudio"
+                call.message.reply_to_message, url, format_id=f"{format_id}+bestaudio"
             )
         else:
             bot.answer_callback_query(call.id, "You didn't send the request")
