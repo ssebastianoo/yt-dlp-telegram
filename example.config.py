@@ -49,3 +49,10 @@ secret_key: str = "your-secret-key"
 # this is used to solve youtube challenges, you can set it to None if you don't
 # need it or change the runtime like {"node": {"path": "node"}}
 js_runtime: dict[str, dict[str, str] | None] | None = {"bun": {"path": "bun"}}
+
+# Channel to forward videos to when using the /forward command or when
+# authorized users send links in private chat. Set to None to disable.
+forward_to: int | None = None
+
+# User IDs allowed to forward videos (used when forward_to is set)
+forward_permissions: list[int] = []
