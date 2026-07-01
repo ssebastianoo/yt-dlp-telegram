@@ -92,6 +92,7 @@ active_user_downloads: dict[int, int] = {}
 queued_user_downloads: dict[int, int] = {}
 _format_registry: dict[str, str] = {}
 _format_counter = 0
+format_lock = threading.Lock()
 
 
 def encrypt_cookie(cookie_data: str) -> str:
@@ -482,6 +483,8 @@ def _perform_download(
         if cookie_file and os.path.exists(cookie_file):
             os.remove(cookie_file)
         _cleanup(video_title)
+        if msg:
+            last_edited.pop(f"{message.chat.id}-{msg.message_id}", None)
 
 
 def _download_worker() -> None:
@@ -631,19 +634,24 @@ def custom(message):
 
     global _format_registry, _format_counter
     data = {}
-    for x in formats:
-        if x.get("video_ext") == "none":
-            continue
-        resolution = x.get("resolution") or "unknown"
-        ext = x.get("ext") or "unknown"
-        label = f"{resolution}.{ext}"
-        # Deduplicate by appending a counter when needed
-        if label in data:
-            label = f"{resolution}.{ext} ({x.get('format_id')})"
-        fid = str(_format_counter)
-        _format_counter += 1
-        _format_registry[fid] = x["format_id"]
-        data[label] = {"callback_data": fid}
+    with format_lock:
+        while len(_format_registry) > 2000:
+            first_key = next(iter(_format_registry))
+            _format_registry.pop(first_key, None)
+
+        for x in formats:
+            if x.get("video_ext") == "none":
+                continue
+            resolution = x.get("resolution") or "unknown"
+            ext = x.get("ext") or "unknown"
+            label = f"{resolution}.{ext}"
+            # Deduplicate by appending a counter when needed
+            if label in data:
+                label = f"{resolution}.{ext} ({x.get('format_id')})"
+            fid = str(_format_counter)
+            _format_counter += 1
+            _format_registry[fid] = x["format_id"]
+            data[label] = {"callback_data": fid}
 
     markup = quick_markup(data, row_width=2)
 
@@ -775,7 +783,8 @@ def callback(call):
     elif call.message.reply_to_message:
         if call.from_user.id == call.message.reply_to_message.from_user.id:
             url = get_text(call.message.reply_to_message)
-            format_id = _format_registry.get(call.data)
+            with format_lock:
+                format_id = _format_registry.get(call.data)
             if not format_id:
                 bot.answer_callback_query(call.id, "Format no longer available")
                 return
