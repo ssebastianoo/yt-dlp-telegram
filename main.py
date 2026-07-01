@@ -14,7 +14,7 @@ import requests
 import telebot
 import yt_dlp
 from cryptography.fernet import Fernet
-from telebot import types
+from telebot import apihelper, types
 from telebot.util import quick_markup
 from yt_dlp.utils import DownloadCancelled, DownloadError, ExtractorError
 
@@ -45,17 +45,44 @@ cipher = Fernet(base64.urlsafe_b64encode(key))
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 db_path = os.path.join(script_dir, "db.db")
-db_conn = sqlite3.connect(db_path, check_same_thread=False)
-db_cursor = db_conn.cursor()
-db_cursor.execute("""
-    CREATE TABLE IF NOT EXISTS user_cookies (
-        user_id INTEGER PRIMARY KEY,
-        cookie_data TEXT NOT NULL
-    )
-""")
-db_conn.commit()
 
-ses = requests.Session()
+
+def init_db() -> None:
+    conn = sqlite3.connect(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_cookies (
+                user_id INTEGER PRIMARY KEY,
+                cookie_data TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+init_db()
+
+
+def db_query(
+    query: str, params: tuple = (), fetchone: bool = False, commit: bool = False
+) -> Any:
+    """Execute a sqlite query safely in a thread-safe manner."""
+    conn = sqlite3.connect(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        if commit:
+            conn.commit()
+        if fetchone:
+            return cursor.fetchone()
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+apihelper.CONNECT_TIMEOUT = 30
+apihelper.READ_TIMEOUT = 30
 bot = telebot.TeleBot(config.token)
 last_edited = {}
 download_queue: Queue[dict] = Queue()
@@ -351,6 +378,7 @@ def _perform_download(
         "outtmpl": f"{config.output_folder}/{video_title}.%(ext)s",
         "progress_hooks": [_make_progress_hook(message, msg)],
         "max_filesize": max_filesize,
+        "socket_timeout": 30,
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3"}]
         if audio
         else [],
@@ -363,10 +391,11 @@ def _perform_download(
     cookie_file = None
     try:
         user_id = message.from_user.id
-        db_cursor.execute(
-            "SELECT cookie_data FROM user_cookies WHERE user_id = ?", (user_id,)
+        result = db_query(
+            "SELECT cookie_data FROM user_cookies WHERE user_id = ?",
+            (user_id,),
+            fetchone=True,
         )
-        result = db_cursor.fetchone()
 
         if result:
             decrypted_data = decrypt_cookie(result[0])
@@ -460,18 +489,23 @@ def _download_worker() -> None:
 
     while True:
         task = download_queue.get()
-        user_id = task["user_id"]
+        user_id = task.get("user_id")
+        if not user_id:
+            download_queue.task_done()
+            continue
 
-        with queue_lock:
-            active_global_downloads += 1
-            active_user_downloads[user_id] = active_user_downloads.get(user_id, 0) + 1
-            queued_user_downloads[user_id] = max(
-                0, queued_user_downloads.get(user_id, 0) - 1
-            )
-            if queued_user_downloads[user_id] == 0:
-                del queued_user_downloads[user_id]
-
+        incremented = False
         try:
+            with queue_lock:
+                active_global_downloads += 1
+                active_user_downloads[user_id] = active_user_downloads.get(user_id, 0) + 1
+                queued_user_downloads[user_id] = max(
+                    0, queued_user_downloads.get(user_id, 0) - 1
+                )
+                if queued_user_downloads[user_id] == 0:
+                    del queued_user_downloads[user_id]
+                incremented = True
+
             _perform_download(
                 task["message"],
                 task["url"],
@@ -479,15 +513,18 @@ def _download_worker() -> None:
                 task["format_id"],
                 task["forward"],
             )
+        except Exception as e:
+            print(f"Error in download worker for task from user {user_id}: {e}")
         finally:
-            with queue_lock:
-                active_global_downloads -= 1
-                active_user_downloads[user_id] = max(
-                    0, active_user_downloads.get(user_id, 0) - 1
-                )
-                if active_user_downloads[user_id] == 0:
-                    del active_user_downloads[user_id]
-            download_queue.task_done()
+            if incremented:
+                with queue_lock:
+                    active_global_downloads -= 1
+                    active_user_downloads[user_id] = max(
+                        0, active_user_downloads.get(user_id, 0) - 1
+                    )
+                    if active_user_downloads[user_id] == 0:
+                        del active_user_downloads[user_id]
+            download_queue.task_done() 
 
 
 def log(message, text: str, media: str):
@@ -580,7 +617,7 @@ def custom(message):
     msg = bot.reply_to(message, "Getting formats...")
 
     try:
-        with yt_dlp.YoutubeDL() as ydl:
+        with yt_dlp.YoutubeDL({"socket_timeout": 30}) as ydl:
             info = ydl.extract_info(url, download=False)
     except Exception:
         bot.edit_message_text(
@@ -661,10 +698,11 @@ def handle_cookie(message):
     user_id = message.from_user.id
 
     if not message.document:
-        db_cursor.execute(
-            "SELECT cookie_data FROM user_cookies WHERE user_id = ?", (user_id,)
+        result = db_query(
+            "SELECT cookie_data FROM user_cookies WHERE user_id = ?",
+            (user_id,),
+            fetchone=True,
         )
-        result = db_cursor.fetchone()
 
         if result:
             cookie_file = f"{config.output_folder}/cookies_{user_id}_temp.txt"
@@ -709,11 +747,11 @@ def handle_cookie(message):
 
     encrypted_data = encrypt_cookie(filtered_cookie_data)
 
-    db_cursor.execute(
+    db_query(
         "INSERT OR REPLACE INTO user_cookies (user_id, cookie_data) VALUES (?, ?)",
         (user_id, encrypted_data),
+        commit=True,
     )
-    db_conn.commit()
     bot.reply_to(message, "Cookies saved successfully!")
 
 
@@ -721,8 +759,11 @@ def handle_cookie(message):
 def callback(call):
     if call.data == "delete_cookies":
         user_id = call.from_user.id
-        db_cursor.execute("DELETE FROM user_cookies WHERE user_id = ?", (user_id,))
-        db_conn.commit()
+        db_query(
+            "DELETE FROM user_cookies WHERE user_id = ?",
+            (user_id,),
+            commit=True,
+        )
 
         bot.edit_message_caption(
             chat_id=call.message.chat.id,

@@ -1,7 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Overview
 
 A single-file Telegram bot (`main.py`) that uses yt-dlp to download media from YouTube, TikTok, Instagram, Twitter/X, and Bluesky. All application logic lives in one file around 590 lines.
