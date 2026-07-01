@@ -646,6 +646,11 @@ def get_chat_id(message):
     bot.reply_to(message, message.chat.id)
 
 
+@bot.message_handler(commands=["queue"])
+def queue_command(message):
+    bot.reply_to(message, f"Videos in queue: {download_queue.qsize()}")
+
+
 def is_cookie_command(message):
     text = message.text or message.caption or ""
     return text.startswith("/cookie") or text.startswith("/cookies")

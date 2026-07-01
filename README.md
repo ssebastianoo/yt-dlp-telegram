@@ -62,6 +62,7 @@ A Telegram bot that downloads media on Telegram using [yt-dlp](https://github.co
 - `/custom <url>` - Show available formats and pick one
 - `/cookies` - Attach a cookies txt file to be used when downloading videos
 - `/id` - Return current chat ID (useful for `logs` config)
+- `/queue` - Return the number of videos currently in the queue
 
 In private chat, you can also just send a URL directly.
 
