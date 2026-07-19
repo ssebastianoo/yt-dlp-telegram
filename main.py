@@ -4,6 +4,8 @@ import hashlib
 import os
 import re
 import sqlite3
+import subprocess
+import sys
 import threading
 import time
 from queue import Queue
@@ -141,14 +143,40 @@ def is_allowed_domain(url):
 def test(message):
     bot.reply_to(
         message,
-        "*Send me a video link* and I'll download it for you, works with *YouTube*, *TikTok*, *Instagram*, *Twitter* and *Bluesky*.\n\n_Powered by_ [yt-dlp](https://github.com/yt-dlp/yt-dlp/)",
+        "*Send me a video link* and I'll download it for you (works with *YouTube*, *TikTok*, *Instagram*, *Twitter*, and *Bluesky*).\n\n"
+        "Use `/image <url>` to download images/galleries via *gallery-dl*.\n\n"
+        "_Powered by_ [yt-dlp](https://github.com/yt-dlp/yt-dlp/) and [gallery-dl](https://github.com/mikf/gallery-dl)",
         parse_mode="MARKDOWN",
         disable_web_page_preview=True,
     )
 
 
-def _validate_url(message, url: str) -> bool:
+def _validate_url(message, url: str, image: bool = False) -> bool:
     """Validate URL domain and YouTube-specific rules. Returns False and replies if invalid."""
+    if image:
+        allowed_img = getattr(config, "allowed_image_domains", None)
+        if allowed_img is not None:
+            try:
+                parsed_url = urlparse(url)
+                domain = parsed_url.netloc.lower()
+                if ":" in domain:
+                    domain = domain.split(":")[0]
+                is_allowed = False
+                for allowed_domain in allowed_img:
+                    if domain == allowed_domain or domain.endswith("." + allowed_domain):
+                        is_allowed = True
+                        break
+                if not is_allowed:
+                    bot.reply_to(
+                        message,
+                        "Invalid URL. This domain is not allowed for image downloads.",
+                    )
+                    return False
+            except (ValueError, AttributeError):
+                bot.reply_to(message, "Invalid URL.")
+                return False
+        return True
+
     if not is_allowed_domain(url):
         bot.reply_to(
             message,
@@ -240,6 +268,44 @@ def _send_media(message, info: Any, audio: bool, forward: bool = False) -> None:
             )
 
 
+def send_image_group(chat_id: int, filepaths: list[str], reply_to_message_id: int | None = None) -> None:
+    if not filepaths:
+        return
+
+    # If only 1 file, send it directly
+    if len(filepaths) == 1:
+        path = filepaths[0]
+        ext = os.path.splitext(path)[1].lower()
+        is_video = ext in [".mp4", ".webm", ".gif", ".mov"]
+        with open(path, "rb") as f:
+            if is_video:
+                bot.send_video(chat_id, f, reply_to_message_id=reply_to_message_id)
+            else:
+                bot.send_photo(chat_id, f, reply_to_message_id=reply_to_message_id)
+        return
+
+    # If multiple files, group them into chunks of 10
+    chunk_size = 10
+    for i in range(0, len(filepaths), chunk_size):
+        chunk = filepaths[i:i + chunk_size]
+        opened_files = []
+        media = []
+        try:
+            for path in chunk:
+                ext = os.path.splitext(path)[1].lower()
+                is_video = ext in [".mp4", ".webm", ".gif", ".mov"]
+                f = open(path, "rb")
+                opened_files.append(f)
+                if is_video:
+                    media.append(types.InputMediaVideo(f))
+                else:
+                    media.append(types.InputMediaPhoto(f))
+            bot.send_media_group(chat_id, media, reply_to_message_id=reply_to_message_id)
+        finally:
+            for f in opened_files:
+                f.close()
+
+
 def _cleanup(video_title: int) -> None:
     """Remove all files in the output folder that belong to this download."""
     for file in os.listdir(config.output_folder):
@@ -285,7 +351,7 @@ def _is_transient_error(e: Exception) -> bool:
     return False
 
 
-def check_url(content: str, message) -> dict:
+def check_url(content: str, message, image: bool = False) -> dict:
     match = re.search(r"https?://\S+", content)
     url = match.group(0) if match else content
 
@@ -293,14 +359,19 @@ def check_url(content: str, message) -> dict:
         bot.reply_to(message, "Invalid URL")
         return {"success": False}
 
-    if not _validate_url(message, url):
+    if not _validate_url(message, url, image):
         return {"success": False}
 
     return {"success": True, "url": url}
 
 
 def enqueue_download(
-    message, content, audio: bool = False, format_id: str = "mp4", forward: bool = False
+    message,
+    content,
+    audio: bool = False,
+    format_id: str = "mp4",
+    forward: bool = False,
+    image: bool = False,
 ) -> None:
     forbidden = False
     if whitelist is not None and message.from_user.id not in whitelist:
@@ -317,7 +388,7 @@ def enqueue_download(
         bot.reply_to(message, "Invalid URL")
         return
 
-    check = check_url(content, message)
+    check = check_url(content, message, image)
     if not check["success"]:
         return
 
@@ -349,6 +420,7 @@ def enqueue_download(
                 "format_id": format_id,
                 "forward": forward,
                 "user_id": user_id,
+                "image": image,
             }
         )
         position = download_queue.qsize()
@@ -366,10 +438,11 @@ def _perform_download(
     audio: bool = False,
     format_id: str = "mp4",
     forward: bool = False,
+    image: bool = False,
 ) -> None:
     msg = bot.reply_to(
         message,
-        "Downloading...\n\n<i>Want to stay updated? @SatoruStatus</i>",
+        "Downloading image(s)..." if image else "Downloading...\n\n<i>Want to stay updated? @SatoruStatus</i>",
         parse_mode="HTML",
     )
     video_title = round(time.time() * 1000)
@@ -405,53 +478,135 @@ def _perform_download(
                 f.write(decrypted_data)
             ydl_opts["cookiefile"] = cookie_file
 
-        for attempt in range(max_retries + 1):
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                break
-            except (DownloadError, ExtractorError, DownloadCancelled) as e:
-                if _is_transient_error(e) and attempt < max_retries:
-                    _cleanup(video_title)
-                    print(f"Retry {attempt + 1}/{max_retries} for {url}: {e}")
-                    time.sleep(retry_delay)
-                    continue
-                raise
+        if image:
+            cmd = [
+                sys.executable,
+                "-m",
+                "gallery_dl",
+                "-D",
+                config.output_folder,
+                "-f",
+                f"{video_title}_{{num|id}}.{{extension}}",
+                "--Print",
+                "{filepath}",
+            ]
+            if cookie_file:
+                cmd.extend(["--cookies", cookie_file])
+            cmd.append(url)
 
-        bot.edit_message_text(
-            chat_id=message.chat.id,
-            message_id=msg.message_id,
-            text="Sending file to Telegram...",
-        )
-
-        for send_attempt in range(max_retries + 1):
-            try:
-                _send_media(message, info, audio, forward)
-                break
-            except Exception as e:
-                if send_attempt < max_retries:
-                    print(
-                        f"Send retry {send_attempt + 1}/{max_retries} for {url}: {e}"
+            result = None
+            for attempt in range(max_retries + 1):
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        check=True,
                     )
-                    time.sleep(retry_delay)
-                    continue
-                raise
+                    break
+                except subprocess.CalledProcessError as e:
+                    has_files = any(f.startswith(str(video_title)) for f in os.listdir(config.output_folder))
+                    if has_files:
+                        result = e
+                        break
+                    if attempt < max_retries:
+                        _cleanup(video_title)
+                        print(f"Retry {attempt + 1}/{max_retries} for image {url}: {e.stderr}")
+                        time.sleep(retry_delay)
+                        continue
+                    raise
 
-        if forward:
             bot.edit_message_text(
                 chat_id=message.chat.id,
                 message_id=msg.message_id,
-                text="File forwarded",
+                text="Sending file(s) to Telegram...",
             )
-        else:
+
+            downloaded_files = []
+            if result and result.stdout:
+                for line in result.stdout.splitlines():
+                    line = line.strip()
+                    if line and os.path.exists(line) and os.path.basename(line).startswith(str(video_title)):
+                        downloaded_files.append(line)
+
+            if not downloaded_files:
+                for file in os.listdir(config.output_folder):
+                    if file.startswith(str(video_title)):
+                        downloaded_files.append(os.path.join(config.output_folder, file))
+
+            def sort_key(filepath):
+                filename = os.path.basename(filepath)
+                rest = filename[len(str(video_title)) + 1:]
+                name_part = os.path.splitext(rest)[0]
+                if name_part.isdigit():
+                    return (0, int(name_part))
+                return (1, name_part)
+
+            downloaded_files.sort(key=sort_key)
+
+            if not downloaded_files:
+                raise MissingInfoError("No downloaded images found")
+
+            for send_attempt in range(max_retries + 1):
+                try:
+                    send_image_group(message.chat.id, downloaded_files, reply_to_message_id=message.message_id)
+                    break
+                except Exception as e:
+                    if send_attempt < max_retries:
+                        print(f"Send retry {send_attempt + 1}/{max_retries} for image {url}: {e}")
+                        time.sleep(retry_delay)
+                        continue
+                    raise
+
             bot.delete_message(message.chat.id, msg.message_id)
+        else:
+            for attempt in range(max_retries + 1):
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                    break
+                except (DownloadError, ExtractorError, DownloadCancelled) as e:
+                    if _is_transient_error(e) and attempt < max_retries:
+                        _cleanup(video_title)
+                        print(f"Retry {attempt + 1}/{max_retries} for {url}: {e}")
+                        time.sleep(retry_delay)
+                        continue
+                    raise
+
+            bot.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=msg.message_id,
+                text="Sending file to Telegram...",
+            )
+
+            for send_attempt in range(max_retries + 1):
+                try:
+                    _send_media(message, info, audio, forward)
+                    break
+                except Exception as e:
+                    if send_attempt < max_retries:
+                        print(
+                            f"Send retry {send_attempt + 1}/{max_retries} for {url}: {e}"
+                        )
+                        time.sleep(retry_delay)
+                        continue
+                    raise
+
+            if forward:
+                bot.edit_message_text(
+                    chat_id=message.chat.id,
+                    message_id=msg.message_id,
+                    text="File forwarded",
+                )
+            else:
+                bot.delete_message(message.chat.id, msg.message_id)
     except MissingInfoError:
         bot.edit_message_text(
-            "Couldn't find a way to download this video, you can report it here: @SatoruSupport",
+            "Couldn't find any media files to send, you can report it here: @SatoruSupport",
             message.chat.id,
             msg.message_id,
         )
-    except (DownloadError, ExtractorError) as e:
+    except (DownloadError, ExtractorError, subprocess.CalledProcessError) as e:
         err = str(e).lower()
         text: str
 
@@ -460,7 +615,7 @@ def _perform_download(
         elif "login required" in err or "rate-limit reached" in err:
             text = "Content not available (Rate limit or login required)."
         else:
-            text = "There was an error downloading the video, please try again later."
+            text = "There was an error downloading the media, please try again later."
 
         bot.edit_message_text(text, message.chat.id, msg.message_id)
     except DownloadCancelled:
@@ -515,6 +670,7 @@ def _download_worker() -> None:
                 task["audio"],
                 task["format_id"],
                 task["forward"],
+                task.get("image", False),
             )
         except Exception as e:
             print(f"Error in download worker for task from user {user_id}: {e}")
@@ -575,6 +731,19 @@ def download_audio_command(message):
 
     log(message, text, "audio")
     enqueue_download(message, text, True)
+
+
+@bot.message_handler(commands=["image"])
+def download_image_command(message):
+    text = get_text(message)
+    if not text:
+        bot.reply_to(
+            message, "Invalid usage, use `/image url`", parse_mode="MARKDOWN"
+        )
+        return
+
+    log(message, text, "image")
+    enqueue_download(message, text, image=True)
 
 
 @bot.message_handler(commands=["forward"])
@@ -663,6 +832,11 @@ def filter_cookies_by_domain(cookie_data: str) -> str:
     lines = cookie_data.split("\n")
     filtered_lines = []
 
+    all_allowed = set(allowed_domains)
+    allowed_img = getattr(config, "allowed_image_domains", None)
+    if allowed_img:
+        all_allowed.update(allowed_img)
+
     for line in lines:
         if line.startswith("#") or not line.strip():
             filtered_lines.append(line)
@@ -675,7 +849,7 @@ def filter_cookies_by_domain(cookie_data: str) -> str:
         domain = parts[0].lstrip(".")
 
         is_allowed = False
-        for allowed_domain in allowed_domains:
+        for allowed_domain in all_allowed:
             if domain == allowed_domain or domain.endswith("." + allowed_domain):
                 is_allowed = True
                 break

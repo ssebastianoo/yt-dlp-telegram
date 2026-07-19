@@ -49,6 +49,10 @@ allowed_domains: list[str] = [
     "www.bsky.app",
 ]
 
+# The allowed domains for downloading images via gallery-dl.
+# If None, all domains are allowed.
+allowed_image_domains: list[str] | None = None
+
 # secret key used to encrypt/decrypt stores cookies
 secret_key: str = "your-secret-key"
 

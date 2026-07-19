@@ -46,6 +46,7 @@ A Telegram bot that downloads media on Telegram using [yt-dlp](https://github.co
 
 - Download video with `/download <url>`
 - Download audio (MP3 extract) with `/audio <url>`
+- Download images/galleries with `/image <url>` (powered by [gallery-dl](https://github.com/mikf/gallery-dl))
 - Choose custom format with `/custom <url>`
 - Cookie support for authentication
 - Optional logging to a Telegram chat/channel
@@ -59,8 +60,9 @@ A Telegram bot that downloads media on Telegram using [yt-dlp](https://github.co
 - `/start` or `/help` - Show usage help
 - `/download <url>` - Download video
 - `/audio <url>` - Download and extract MP3
+- `/image <url>` - Download image or gallery/album
 - `/custom <url>` - Show available formats and pick one
-- `/cookies` - Attach a cookies txt file to be used when downloading videos
+- `/cookies` - Attach a cookies txt file to be used when downloading videos or images
 - `/id` - Return current chat ID (useful for `logs` config)
 - `/queue` - Return the number of videos currently in the queue
 
@@ -86,17 +88,20 @@ In private chat, you can also just send a URL directly.
 ## Quick Start (Local)
 
 1. Clone the repo:
+
    ```bash
    git clone https://github.com/ssebastianoo/yt-dlp-telegram
    cd yt-dlp-telegram
    ```
 
 2. Install dependencies:
+
    ```bash
    pip install -r requirements.txt
    ```
 
 3. Create `config.py` from the example:
+
    ```bash
    cp example.config.py config.py
    ```
@@ -175,16 +180,19 @@ Look for:
 ### 4) Stop / restart / update
 
 Stop:
+
 ```bash
 docker compose down
 ```
 
 Restart:
+
 ```bash
 docker compose restart bot
 ```
 
 Rebuild after code changes:
+
 ```bash
 docker compose up -d --build
 ```
@@ -232,15 +240,18 @@ Set `max_filesize` according to what you want the bot to attempt and what Telegr
 
 Some websites may require authentication to download content, this can be set by passing a `cookies.txt` file to the `/cookie` command.
 YouTube requires a js challenge to be solved to download videos using cookies, this needs `js_runtime` to be set in `config.py`, for example if you use **Node** you can set:
+
 ```py
 js_runtime: dict[str, dict[str, str] | None] | None = {"node": {"path": "node"}}
 
 # Or if you use Bun
 js_runtime: dict[str, dict[str, str] | None] | None = {"bun": {"path": "bun"}}
 ```
+
 Cookies are stored in `db.db` (using Sqlite3) and encrypted with a `secret_key` that can be set in the config file.
 
 ### Where can I find cookies.txt
+
 You need to export it from your browser using an extension like [this one](https://github.com/kairi003/Get-cookies.txt-LOCALLY?tab=readme-ov-file#from-webstore)
 
 ---

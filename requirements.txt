@@ -2,3 +2,4 @@ yt-dlp
 pyTelegramBotAPI
 requests
 cryptography
+gallery-dl
