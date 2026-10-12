@@ -42,6 +42,8 @@ allowed_domains: list[str] = [
     "www.tiktok.com",
     "vm.tiktok.com",
     "vt.tiktok.com",
+    "tt.site",
+    "www.tt.site"
     "instagram.com",
     "www.instagram.com",
     "twitter.com",
@@ -49,7 +51,7 @@ allowed_domains: list[str] = [
     "x.com",
     "www.x.com",
     "bsky.app",
-    "www.bsky.app",
+    "www.bsky.app"
 ]
 
 # The allowed domains for downloading images via gallery-dl.
