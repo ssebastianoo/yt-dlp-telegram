@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from queue import Queue
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -233,7 +234,10 @@ def _make_progress_hook(message, msg) -> Callable:
             if downloaded_bytes > max_filesize:
                 raise DownloadCancelled("File too large")
 
-            perc = round(d["downloaded_bytes"] * 100 / d["total_bytes"])
+            total_bytes = d.get("total_bytes") or d.get("total_bytes_estimate")
+            if not total_bytes:
+                return
+            perc = round(downloaded_bytes * 100 / total_bytes)
             bot.edit_message_text(
                 chat_id=message.chat.id,
                 message_id=msg.message_id,
@@ -256,8 +260,79 @@ class MissingInfoError(Exception):
     pass
 
 
-def _send_media(message, info: Any, audio: bool, forward: bool = False) -> None:
-    """Send the downloaded file back to the user via Telegram."""
+def _format_size(f: dict) -> float | None:
+    return f.get("filesize") or f.get("filesize_approx")
+
+
+def _select_format(ctx: dict):
+    """yt-dlp format selector: best video (+ m4a audio) that fits in max_filesize.
+
+    Avoids VP9/AV1/HEVC since they don't play everywhere on Telegram (formats with
+    unknown codecs, like Instagram's progressive ones, are usually H.264). Formats
+    with unknown size are only used when nothing with a known size fits; yt-dlp's
+    max_filesize still guards those during the download.
+    """
+    non_h264_codecs = ("vp", "av01", "hev", "hvc", "h265", "bytevc")
+    formats = ctx["formats"]  # sorted worst -> best by yt-dlp
+    audios = [
+        f
+        for f in formats
+        if f.get("vcodec") == "none"
+        and f.get("acodec") != "none"
+        and f.get("ext") in ("m4a", "mp4")
+    ]
+    best_audio = audios[-1] if audios else None
+
+    candidates: list[tuple[float | None, dict]] = []
+    for f in formats:
+        if f.get("vcodec") == "none":
+            continue
+        if f.get("acodec") != "none":
+            candidates.append((_format_size(f), f))
+        elif best_audio and f.get("ext") == "mp4":
+            video_size, audio_size = _format_size(f), _format_size(best_audio)
+            candidates.append(
+                (
+                    video_size + audio_size if video_size and audio_size else None,
+                    {
+                        "format_id": f"{f['format_id']}+{best_audio['format_id']}",
+                        "ext": "mp4",
+                        "requested_formats": [f, best_audio],
+                        "protocol": f"{f.get('protocol')}+{best_audio.get('protocol')}",
+                        "width": f.get("width"),
+                        "height": f.get("height"),
+                        "vcodec": f.get("vcodec"),
+                        "acodec": best_audio.get("acodec"),
+                    },
+                )
+            )
+
+    if not candidates:
+        if formats:
+            yield formats[-1]
+        return
+
+    def rank(item: tuple[int, tuple[float | None, dict]]) -> tuple[bool, int]:
+        index, (_, f) = item
+        vcodec = (f.get("vcodec") or "").lower()
+        return (not vcodec.startswith(non_h264_codecs), index)
+
+    indexed = list(enumerate(candidates))
+    budget = max_filesize * 0.95
+    fitting = [c for c in indexed if c[1][0] and c[1][0] <= budget]
+    unknown = [c for c in indexed if not c[1][0]]
+
+    if fitting:
+        yield max(fitting, key=rank)[1][1]
+    elif unknown:
+        yield max(unknown, key=rank)[1][1]
+    else:
+        # Everything is too big: pick the smallest so yt-dlp aborts with a clear reason
+        yield min(candidates, key=lambda c: c[0] or 0)[1]
+
+
+def _get_downloaded_file(info: Any) -> dict:
+    """Return the requested download entry, raising if the file wasn't saved."""
 
     downloads = info.get("requested_downloads") or None
 
@@ -268,9 +343,20 @@ def _send_media(message, info: Any, audio: bool, forward: bool = False) -> None:
     if not downloads or len(downloads) == 0:
         raise MissingInfoError("No requested downloads found")
 
-    filepath = downloads[0]["filepath"]
+    filepath = downloads[0].get("filepath")
+    if not filepath or not os.path.exists(filepath):
+        # yt-dlp skips the download without raising when the file exceeds max_filesize
+        raise DownloadCancelled("File too large")
+    if os.path.getsize(filepath) > max_filesize:
+        raise DownloadCancelled("File too large")
 
-    with open(filepath, "rb") as f:
+    return downloads[0]
+
+
+def _send_media(message, download: dict, audio: bool, forward: bool = False) -> None:
+    """Send the downloaded file back to the user via Telegram."""
+
+    with open(download["filepath"], "rb") as f:
         channel_id = message.chat.id
         if forward:
             assert forward_to is not None, (
@@ -278,13 +364,16 @@ def _send_media(message, info: Any, audio: bool, forward: bool = False) -> None:
             )
             channel_id = forward_to
         if audio:
-            bot.send_audio(channel_id, f, reply_to_message_id=message.message_id)
+            bot.send_audio(
+                channel_id, f, reply_to_message_id=message.message_id, timeout=120
+            )
         else:
             bot.send_video(
                 channel_id,
                 f,
-                width=downloads[0]["width"],
-                height=downloads[0]["height"],
+                width=download.get("width"),
+                height=download.get("height"),
+                timeout=120,
             )
 
 
@@ -346,6 +435,9 @@ def _is_transient_error(e: Exception) -> bool:
     ):
         return True
 
+    if "confirm your age" in err or "inappropriate for some users" in err:
+        return False
+
     if "[youtube]" in err and "sign in" in err:
         return True
 
@@ -371,6 +463,49 @@ def _is_transient_error(e: Exception) -> bool:
     return False
 
 
+def _download_error_message(e: Exception) -> str:
+    """Map a yt-dlp / gallery-dl error to a message the user can act on."""
+    err = str(e).lower()
+    if isinstance(e, subprocess.CalledProcessError) and e.stderr:
+        err += " " + e.stderr.lower()
+
+    if "confirm your age" in err or "inappropriate for some users" in err:
+        return (
+            "This video is age-restricted. Upload cookies from a logged-in account "
+            "with /cookies to download it."
+        )
+    if "members-only" in err or "join this channel" in err:
+        return "This video is only available to channel members."
+    if "premieres in" in err or "live event will begin" in err:
+        return "This video hasn't been released yet, try again once it's out."
+    if "private video" in err or "is private" in err or "private account" in err:
+        return "This content is private."
+    if "[youtube]" in err and ("sign in" in err or "rate-limited" in err):
+        return (
+            "We're sorry, YouTube is ratelimiting third party downloaders right now, "
+            "try again later."
+        )
+    if "isn't available to everyone" in err or "certain audiences" in err:
+        return (
+            "This post is restricted (e.g. age-restricted). Upload cookies from a "
+            "logged-in account with /cookies to download it."
+        )
+    if "requiring login" in err or "login required" in err or "rate-limit reached" in err:
+        return (
+            "This content requires login or the site is ratelimiting us. Try again "
+            "later, or upload your cookies with /cookies."
+        )
+    if (
+        "no video could be found" in err
+        or "there is no video" in err
+        or "no video formats found" in err
+    ):
+        return "No video found in this post. For photos, use /image <url>."
+    if "video unavailable" in err or "content isn't available" in err:
+        return "This content is unavailable (removed, region-locked or restricted)."
+    return "There was an error downloading the media, please try again later."
+
+
 def check_url(content: str, message, image: bool = False) -> dict:
     match = re.search(r"https?://\S+", content)
     url = match.group(0) if match else content
@@ -389,7 +524,7 @@ def enqueue_download(
     message,
     content,
     audio: bool = False,
-    format_id: str = "mp4",
+    format_id: str | None = None,
     forward: bool = False,
     image: bool = False,
 ) -> None:
@@ -456,7 +591,7 @@ def _perform_download(
     message,
     url: str,
     audio: bool = False,
-    format_id: str = "mp4",
+    format_id: str | None = None,
     forward: bool = False,
     image: bool = False,
 ) -> None:
@@ -468,7 +603,7 @@ def _perform_download(
     video_title = round(time.time() * 1000)
 
     ydl_opts: yt_dlp._Params = {
-        "format": format_id,
+        "format": format_id or ("ba/b" if audio else _select_format),
         "outtmpl": f"{config.output_folder}/{video_title}.%(ext)s",
         "progress_hooks": [_make_progress_hook(message, msg)],
         "max_filesize": max_filesize,
@@ -593,6 +728,8 @@ def _perform_download(
                         continue
                     raise
 
+            download = _get_downloaded_file(info)
+
             bot.edit_message_text(
                 chat_id=message.chat.id,
                 message_id=msg.message_id,
@@ -601,7 +738,7 @@ def _perform_download(
 
             for send_attempt in range(max_retries + 1):
                 try:
-                    _send_media(message, info, audio, forward)
+                    _send_media(message, download, audio, forward)
                     break
                 except Exception as e:
                     if send_attempt < max_retries:
@@ -627,17 +764,9 @@ def _perform_download(
             msg.message_id,
         )
     except (DownloadError, ExtractorError, subprocess.CalledProcessError) as e:
-        err = str(e).lower()
-        text: str
-
-        if "[youtube]" in err and "sign in" in err:
-            text = "We're sorry, YouTube is ratelimiting third party downloaders right now, try again later."
-        elif "login required" in err or "rate-limit reached" in err:
-            text = "Content not available (Rate limit or login required)."
-        else:
-            text = "There was an error downloading the media, please try again later."
-
-        bot.edit_message_text(text, message.chat.id, msg.message_id)
+        bot.edit_message_text(
+            _download_error_message(e), message.chat.id, msg.message_id
+        )
     except DownloadCancelled:
         bot.edit_message_text(
             f"Download cancelled — file exceeds "
@@ -647,7 +776,8 @@ def _perform_download(
             parse_mode="MARKDOWN",
         )
     except Exception as e:
-        print(f"Unexpected error for {url}: {e}")
+        print(f"Unexpected error for {url}: {e!r}")
+        traceback.print_exc()
         bot.edit_message_text(
             "An unexpected error occurred. Please try again later.",
             message.chat.id,
