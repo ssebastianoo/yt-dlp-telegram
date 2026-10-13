@@ -4,7 +4,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg curl unzip && \
     rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://bun.sh/install | bash
+# yt-dlp only supports bun up to 1.3.14 for solving YouTube JS challenges
+RUN curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.14"
 ENV PATH="/root/.bun/bin:$PATH"
 
 WORKDIR /app
