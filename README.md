@@ -12,6 +12,8 @@ A Telegram bot that downloads media on Telegram using [yt-dlp](https://github.co
 
 **Need more help?** Join the [support group](https://t.me/satorubotsupport) or the [status](https://t.me/satorustatus) channel
 
+### **Want to support the project? [Buy me a coffee ☕!!](https://ko-fi.com/ssebastianoo)**
+
 ## Table of Contents
 
 - [Features](#features)
