@@ -37,7 +37,7 @@ retry_delay = getattr(config, "retry_delay", 5)
 allowed_domains = getattr(config, "allowed_domains", [])
 forward_to: int | None = getattr(config, "forward_to", None)
 forward_permissions: list[int] = getattr(config, "forward_permissions", [])
-donation_url = os.environ.get("DONATION_URL") or "https://ko-fi.com/ssebastianoo"
+donation_url = getattr(config, "donation_url", "https://ko-fi.com/ssebastianoo")
 
 if max_user_concurrent_downloads < 1:
     max_user_concurrent_downloads = 1

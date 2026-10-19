@@ -2,8 +2,6 @@ services:
   bot:
     build: .
     restart: unless-stopped
-    environment:
-      DONATION_URL: ${DONATION_URL:-https://ko-fi.com/ssebastianoo}
     volumes:
       - ./config.py:/app/config.py:ro
       - ./data:/app/data

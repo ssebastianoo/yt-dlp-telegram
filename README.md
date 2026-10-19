@@ -120,15 +120,13 @@ Create a `config.py` file in the project root. `config.py` example [here](exampl
 
 ### Donation link
 
-`/donate` uses the `DONATION_URL` environment variable, defaulting to `https://ko-fi.com/ssebastianoo`.
+Set `donation_url` in `config.py` to change the link shown by `/donate`:
 
-For a local run:
-
-```bash
-DONATION_URL=https://ko-fi.com/ssebastianoo python3 main.py
+```python
+donation_url: str = "https://ko-fi.com/ssebastianoo"
 ```
 
-For Docker Compose, copy `.env.example` to `.env` and edit `DONATION_URL` as needed. Compose reads `.env` automatically and passes the value to the bot. Local Python runs read the process environment, not `.env`.
+This works for local and Docker runs. Existing configurations without `donation_url` use `https://ko-fi.com/ssebastianoo` by default.
 
 ### Concurrency limits
 

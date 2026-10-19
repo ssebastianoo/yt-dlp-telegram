@@ -1,6 +1,9 @@
 # The telegram bot token
 token: str = "123456789:ABcdefGhiJKlmnO"
 
+# The donation link shown by /donate
+donation_url: str = "https://ko-fi.com/ssebastianoo"
+
 # A list of user ids that are allowed to use the bot, if None everyone is allowed
 whitelist: list[int] | None = None  # Example: [123456789, 987654321]
 
