@@ -1214,19 +1214,52 @@ def _start_download_workers() -> None:
         worker.start()
 
 
-bot.set_my_commands(
-    [
-        types.BotCommand("start", "Get started and show usage help"),
-        types.BotCommand("help", "Show usage help"),
-        types.BotCommand("download", "Download a video: /download <url>"),
-        types.BotCommand("audio", "Download MP3 audio: /audio <url>"),
-        types.BotCommand("image", "Download images or a gallery: /image <url>"),
-        types.BotCommand("custom", "Choose a video format: /custom <url>"),
-        types.BotCommand("cookies", "Upload, view or delete your cookies"),
-        types.BotCommand("queue", "Show the number of queued downloads"),
-        types.BotCommand("donate", "Support the project on Ko-fi"),
-    ]
-)
+BOT_COMMANDS = [
+    {"command": "start", "description": "Get started and show usage help"},
+    {"command": "help", "description": "Show usage help"},
+    {"command": "download", "description": "Download a video: /download <url>"},
+    {"command": "audio", "description": "Download MP3 audio: /audio <url>"},
+    {"command": "image", "description": "Download images or a gallery: /image <url>"},
+    {"command": "custom", "description": "Choose a video format: /custom <url>"},
+    {"command": "cookies", "description": "Upload, view or delete your cookies"},
+    {"command": "queue", "description": "Show the number of queued downloads"},
+    {"command": "donate", "description": "Support the project on Ko-fi"},
+]
+
+COMMAND_SCOPES = [
+    {"type": "default"},
+    {"type": "all_private_chats"},
+    {"type": "all_group_chats"},
+    {"type": "all_chat_administrators"},
+]
+
+
+def _bot_api(method: str, **payload: Any) -> Any:
+    response = requests.post(
+        f"https://api.telegram.org/bot{config.token}/{method}",
+        json=payload,
+        timeout=15,
+    )
+    data = response.json()
+    if not data.get("ok"):
+        raise RuntimeError(f"{method} failed: {data.get('description')}")
+    return data["result"]
+
+
+def register_commands() -> None:
+    # Commands set at a narrower scope override the default one, so clear and
+    # set every scope explicitly, then read the result back to verify it.
+    for scope in COMMAND_SCOPES:
+        try:
+            _bot_api("deleteMyCommands", scope=scope)
+            _bot_api("setMyCommands", commands=BOT_COMMANDS, scope=scope)
+            registered = _bot_api("getMyCommands", scope=scope)
+            print(f"registered {len(registered)} commands for scope {scope['type']}")
+        except Exception as e:
+            print(f"failed to register commands for scope {scope['type']}: {e}")
+
+
+register_commands()
 _start_download_workers()
 print(f"ready as @{bot.user.username}")
 bot.infinity_polling()
