@@ -1,6 +1,7 @@
 import base64
 import datetime
 import hashlib
+from html import escape
 import os
 import re
 import sqlite3
@@ -36,6 +37,7 @@ retry_delay = getattr(config, "retry_delay", 5)
 allowed_domains = getattr(config, "allowed_domains", [])
 forward_to: int | None = getattr(config, "forward_to", None)
 forward_permissions: list[int] = getattr(config, "forward_permissions", [])
+donation_url = os.environ.get("DONATION_URL") or "https://ko-fi.com/ssebastianoo"
 
 if max_user_concurrent_downloads < 1:
     max_user_concurrent_downloads = 1
@@ -165,10 +167,35 @@ def test(message):
     bot.reply_to(
         message,
         "*Send me a video link* and I'll download it for you (works with *YouTube*, *TikTok*, *Instagram*, *Twitter*, and *Bluesky*).\n\n"
-        "Use `/image <url>` to download images/galleries via *gallery-dl*.\n\n"
+        "*Commands*\n"
+        "/start - Get started and show usage help\n"
+        "/help - Show usage help\n"
+        "`/download <url>` - Download a video\n"
+        "`/audio <url>` - Download MP3 audio\n"
+        "`/image <url>` - Download images or a gallery\n"
+        "`/custom <url>` - Choose a video format\n"
+        "/cookies - Upload, view or delete your cookies\n"
+        "/queue - Show the number of queued downloads\n"
+        "/donate - Support the project on Ko-fi\n\n"
+        "In private chat, you can also send a URL directly.\n\n"
         "_Powered by_ [yt-dlp](https://github.com/yt-dlp/yt-dlp/) and [gallery-dl](https://github.com/mikf/gallery-dl)",
         parse_mode="MARKDOWN",
         disable_web_page_preview=True,
+    )
+
+
+@bot.message_handler(commands=["donate"])
+def donate_command(message):
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("☕ Support on Ko-fi", url=donation_url))
+    bot.reply_to(
+        message,
+        '<b>Enjoying the bot?</b> '
+        f'<a href="{escape(donation_url, quote=True)}">Buy me a coffee</a> '
+        'on Ko-fi to support the project. Thank you!',
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+        reply_markup=markup,
     )
 
 
@@ -1187,6 +1214,19 @@ def _start_download_workers() -> None:
         worker.start()
 
 
+bot.set_my_commands(
+    [
+        types.BotCommand("start", "Get started and show usage help"),
+        types.BotCommand("help", "Show usage help"),
+        types.BotCommand("download", "Download a video: /download <url>"),
+        types.BotCommand("audio", "Download MP3 audio: /audio <url>"),
+        types.BotCommand("image", "Download images or a gallery: /image <url>"),
+        types.BotCommand("custom", "Choose a video format: /custom <url>"),
+        types.BotCommand("cookies", "Upload, view or delete your cookies"),
+        types.BotCommand("queue", "Show the number of queued downloads"),
+        types.BotCommand("donate", "Support the project on Ko-fi"),
+    ]
+)
 _start_download_workers()
 print(f"ready as @{bot.user.username}")
 bot.infinity_polling()

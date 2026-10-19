@@ -51,14 +51,16 @@ A Telegram bot that downloads media on Telegram using [yt-dlp](https://github.co
 
 ## Commands
 
+The bot automatically registers Telegram's `/` command menu on every startup.
+
 - `/start` or `/help` - Show usage help
 - `/download <url>` - Download video
 - `/audio <url>` - Download and extract MP3
 - `/image <url>` - Download image or gallery/album
 - `/custom <url>` - Show available formats and pick one
 - `/cookies` - Attach a cookies txt file to be used when downloading videos or images
-- `/id` - Return current chat ID (useful for `logs` config)
 - `/queue` - Return the number of videos currently in the queue
+- `/donate` - Show a Ko-fi button to support the project
 
 In private chat, you can also just send a URL directly.
 
@@ -115,6 +117,18 @@ If everything is correct, you should see output similar to:
 ## Configuration Reference
 
 Create a `config.py` file in the project root. `config.py` example [here](example.config.py)
+
+### Donation link
+
+`/donate` uses the `DONATION_URL` environment variable, defaulting to `https://ko-fi.com/ssebastianoo`.
+
+For a local run:
+
+```bash
+DONATION_URL=https://ko-fi.com/ssebastianoo python3 main.py
+```
+
+For Docker Compose, copy `.env.example` to `.env` and edit `DONATION_URL` as needed. Compose reads `.env` automatically and passes the value to the bot. Local Python runs read the process environment, not `.env`.
 
 ### Concurrency limits
 
