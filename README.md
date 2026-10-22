@@ -247,12 +247,12 @@ Set `max_filesize` according to what you want the bot to attempt and what Telegr
 ## Cookies Support
 
 Some websites may require authentication to download content, this can be set by passing a `cookies.txt` file to the `/cookie` command.
-YouTube requires a js challenge to be solved to download videos using cookies, this needs `js_runtime` to be set in `config.py`, for example if you use **Node** you can set:
+YouTube requires a js challenge to be solved to download videos using cookies, this needs `js_runtime` to be set in `config.py`, for example if you use **Node** (the Docker image ships with it) you can set:
 
 ```py
 js_runtime: dict[str, dict[str, str] | None] | None = {"node": {"path": "node"}}
 
-# Or if you use Bun
+# Or if you use Bun (yt-dlp only supports up to 1.3.14, and Bun support is deprecated)
 js_runtime: dict[str, dict[str, str] | None] | None = {"bun": {"path": "bun"}}
 ```
 

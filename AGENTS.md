@@ -43,7 +43,7 @@ A single-file Telegram bot (`main.py`) that uses yt-dlp to download media from Y
 - `config.py` — runtime configuration (gitignored)
 - `example.config.py` — documented config template
 - `db.db` — SQLite3 database (gitignored; placed in `data/` when running with Docker)
-- `Dockerfile` — Python 3.11-slim + ffmpeg + bun
+- `Dockerfile` — Python 3.11-slim + ffmpeg + node (current)
 - `docker-compose.yml` — mounts `config.py` (ro) and `./data:/app/data`
 
 ### Bot framework details
